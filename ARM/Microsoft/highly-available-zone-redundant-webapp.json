@@ -1,0 +1,1835 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "metadata": {
+      "_generator": {
+        "name": "bicep",
+        "version": "0.9.1.41621",
+        "templateHash": "4441675750939726376"
+      }
+    },
+    "parameters": {
+      "applicationName": {
+        "type": "string",
+        "defaultValue": "[format('zrhaweb-{0}', uniqueString(resourceGroup().id))]",
+        "metadata": {
+          "description": "Optional. A name that will be prepended to all deployed resources. Defaults to an alphanumeric id that is unique to the resource group."
+        }
+      },
+      "location": {
+        "type": "string",
+        "defaultValue": "[resourceGroup().location]",
+        "metadata": {
+          "description": "Optional. The Azure region (location) to deploy to. Must be a region that supports availability zones. Defaults to the resource group location."
+        }
+      },
+      "staticWebAppLocation": {
+        "type": "string",
+        "defaultValue": "[parameters('location')]",
+        "metadata": {
+          "description": "Optional. The Azure region (location) to deploy Static Web Apps to. Even though Static Web Apps is a non-regional resource, a location must be chosen from a limited subset of regions. Defaults to the value of the location parameter."
+        }
+      },
+      "tags": {
+        "type": "object",
+        "defaultValue": {
+          "Project": "Azure highly-available zone-redundant web application"
+        },
+        "metadata": {
+          "description": "Optional. An Azure tags object for tagging parent resources that support tags."
+        }
+      },
+      "sqlAdmin": {
+        "type": "string",
+        "defaultValue": "[format('{0}-admin', parameters('applicationName'))]",
+        "metadata": {
+          "description": "Optional. SQL admin username. Defaults to '${applicationName}-admin'"
+        }
+      },
+      "sqlAdminPassword": {
+        "type": "secureString",
+        "defaultValue": "[newGuid()]",
+        "metadata": {
+          "description": "Optional. A password for the Azure SQL server admin user. Defaults to a new GUID."
+        }
+      },
+      "sqlDatabaseName": {
+        "type": "string",
+        "defaultValue": "[format('{0}-sql-db', parameters('applicationName'))]",
+        "metadata": {
+          "description": "Optional. Name of the SQL database to create. Defaults to '${applicationName}-sql-db'"
+        }
+      },
+      "cosmosDatabaseName": {
+        "type": "string",
+        "defaultValue": "[format('{0}-db', parameters('applicationName'))]",
+        "metadata": {
+          "description": "Optional. Name of the Cosmos database to create. Defaults to '${applicationName}-db'"
+        }
+      },
+      "cosmosContainerName": {
+        "type": "string",
+        "defaultValue": "Container1",
+        "metadata": {
+          "description": "Optional. Name of the Cosmos DB container to create. Defaults to 'Container1'"
+        }
+      },
+      "cosmosPartitionKeys": {
+        "type": "array",
+        "defaultValue": [
+          "/id"
+        ],
+        "metadata": {
+          "description": "Optional. Array of properties that make up the Partition Key for the Cosmos DB container. Defaults to [ 'id' ]."
+        }
+      },
+      "servicebusQueueName": {
+        "type": "string",
+        "defaultValue": "Queue1",
+        "metadata": {
+          "description": "Optional. Name of the Service Bus queue to create. Defaults to 'Queue1'"
+        }
+      },
+      "appServicePlanPremiumSku": {
+        "type": "string",
+        "defaultValue": "PremiumV3",
+        "allowedValues": [
+          "PremiumV2",
+          "PremiumV3"
+        ],
+        "metadata": {
+          "description": "Optional. The version of App Service Premium SKU to deploy. Allowed values 'PremiumV2' or 'PremiumV3'. Defaults to 'PremiumV3'."
+        }
+      }
+    },
+    "variables": {
+      "functionsPlan": "[format('{0}-functions-plan', parameters('applicationName'))]",
+      "functionApp1": "[format('{0}-func', parameters('applicationName'))]",
+      "functionContentShareName": "function-content-share",
+      "functionsStorage": "[take(toLower(replace(format('{0}func', parameters('applicationName')), '-', '')), 24)]",
+      "appServicePlan": "[format('{0}-plan', parameters('applicationName'))]",
+      "app1": "[format('{0}-app', parameters('applicationName'))]",
+      "app2": "[format('{0}-test', parameters('applicationName'))]",
+      "vnet": "[format('{0}-vnet', parameters('applicationName'))]",
+      "swa": "[format('{0}-swa', parameters('applicationName'))]",
+      "frontDoor": "[parameters('applicationName')]",
+      "spaFrontend": "[format('{0}-spa', parameters('applicationName'))]",
+      "apiFrontend": "[format('{0}-api', parameters('applicationName'))]",
+      "spaFrontDoorOriginGroup": "[format('{0}-spa-afd-origin-group', parameters('applicationName'))]",
+      "apiFrontDoorOriginGroup": "[format('{0}-api-afd-origin-group', parameters('applicationName'))]",
+      "spaFrontDoorOrigin": "[format('{0}-spa-afd-origin', parameters('applicationName'))]",
+      "apiFrontDoorOrigin": "[format('{0}-api-afd-origin', parameters('applicationName'))]",
+      "spaFrontDoorRoute": "[format('{0}-spa-afd-route', parameters('applicationName'))]",
+      "apiFrontDoorRoute": "[format('{0}-api-afd-route', parameters('applicationName'))]",
+      "redis": "[format('{0}-cache', parameters('applicationName'))]",
+      "servicebus": "[format('{0}-bus', parameters('applicationName'))]",
+      "cogSearch": "[format('{0}-search', parameters('applicationName'))]",
+      "cosmos": "[format('{0}-cosmos', parameters('applicationName'))]",
+      "keyvault": "[format('{0}-kv', parameters('applicationName'))]",
+      "redisConnectionStringSecretName": "RedisConnectionString",
+      "searchApiKeySecretName": "SearchApiKey",
+      "sqlConnectionStringSecretName": "SqlConnectionString",
+      "sql": "[format('{0}-sql', parameters('applicationName'))]",
+      "workspace": "[format('{0}-workspace', parameters('applicationName'))]",
+      "insights": "[format('{0}-insights', parameters('applicationName'))]",
+      "roleDefinitionIds": {
+        "storage": "ba92f5b4-2d11-453d-a403-e96b0029c9fe",
+        "keyvault": "4633458b-17de-408a-b874-0445c86b69e6",
+        "servicebus": "090c5cfd-751d-490a-894a-3ce6f1109419",
+        "cosmosdbDataReader": "00000000-0000-0000-0000-000000000001"
+      },
+      "searchEndpointUrl": {
+        "AzureCloud": "[format('https://{0}.search.windows.net/', variables('cogSearch'))]",
+        "AzureUSGovernment": "[format('https://{0}.search.windows.us/', variables('cogSearch'))]",
+        "AzureChinaCloud": "[format('https://{0}.search.windows.net/', variables('cogSearch'))]"
+      },
+      "privateLinkFunctionsDnsNames": {
+        "AzureCloud": "privatelink.azurewebsites.net",
+        "AzureUSGovernment": "privatelink.azurewebsites.us",
+        "AzureChinaCloud": "privatelink.chinacloudsites.cn"
+      },
+      "privateLinkRedisDnsNames": {
+        "AzureCloud": "privatelink.redis.cache.windows.net",
+        "AzureUSGovernment": "privatelink.redis.cache.usgovcloudapi.net",
+        "AzureChinaCloud": "privatelink.redis.cache.chinacloudapi.cn"
+      },
+      "privateLinkServiceBusDnsNames": {
+        "AzureCloud": "privatelink.servicebus.windows.net",
+        "AzureUSGovernment": "privatelink.servicebus.usgovcloudapi.net",
+        "AzureChinaCloud": "privatelink.servicebus.chinacloudapi.cn"
+      },
+      "privateLinkSearchDnsNames": {
+        "AzureCloud": "privatelink.search.windows.net",
+        "AzureUSGovernment": "privatelink.search.windows.us",
+        "AzureChinaCloud": "privatelink.search.windows.net"
+      },
+      "privateLinkCosmosDnsNames": {
+        "AzureCloud": "privatelink.documents.azure.com",
+        "AzureUSGovernment": "privatelink.documents.azure.us",
+        "AzureChinaCloud": "privatelink.documents.azure.cn"
+      },
+      "privateLinkKeyVaultDnsNames": {
+        "AzureCloud": "privatelink.vaultcore.azure.net",
+        "AzureUSGovernment": "privatelink.vaultcore.usgovcloudapi.net",
+        "AzureChinaCloud": "privatelink.vaultcore.azure.cn"
+      },
+      "appServicePlanPremiumSkus": {
+        "PremiumV2": {
+          "name": "P2v2",
+          "tier": "PremiumV2",
+          "size": "P2v2",
+          "family": "Pv2",
+          "capacity": 3
+        },
+        "PremiumV3": {
+          "name": "P1v3",
+          "tier": "PremiumV3",
+          "size": "P1v3",
+          "family": "Pv3",
+          "capacity": 3
+        }
+      }
+    },
+    "resources": [
+      {
+        "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+        "apiVersion": "2020-06-01",
+        "name": "[format('{0}/{1}', variables('privateLinkFunctionsDnsNames')[environment().name], format('{0}-vnetlink', last(split(resourceId('Microsoft.Network/virtualNetworks', variables('vnet')), '/'))))]",
+        "location": "global",
+        "properties": {
+          "registrationEnabled": false,
+          "virtualNetwork": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+          }
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/privateDnsZones', variables('privateLinkFunctionsDnsNames')[environment().name])]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+        "apiVersion": "2020-06-01",
+        "name": "[format('{0}/{1}', format('privatelink.blob.{0}', environment().suffixes.storage), format('{0}-vnetlink', last(split(resourceId('Microsoft.Network/virtualNetworks', variables('vnet')), '/'))))]",
+        "location": "global",
+        "properties": {
+          "registrationEnabled": false,
+          "virtualNetwork": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+          }
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.blob.{0}', environment().suffixes.storage))]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+        "apiVersion": "2020-06-01",
+        "name": "[format('{0}/{1}', format('privatelink.file.{0}', environment().suffixes.storage), format('{0}-vnetlink', last(split(resourceId('Microsoft.Network/virtualNetworks', variables('vnet')), '/'))))]",
+        "location": "global",
+        "properties": {
+          "registrationEnabled": false,
+          "virtualNetwork": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+          }
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.file.{0}', environment().suffixes.storage))]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+        "apiVersion": "2020-06-01",
+        "name": "[format('{0}/{1}', format('privatelink.table.{0}', environment().suffixes.storage), format('{0}-vnetlink', last(split(resourceId('Microsoft.Network/virtualNetworks', variables('vnet')), '/'))))]",
+        "location": "global",
+        "properties": {
+          "registrationEnabled": false,
+          "virtualNetwork": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+          }
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.table.{0}', environment().suffixes.storage))]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+        "apiVersion": "2020-06-01",
+        "name": "[format('{0}/{1}', format('privatelink.queue.{0}', environment().suffixes.storage), format('{0}-vnetlink', last(split(resourceId('Microsoft.Network/virtualNetworks', variables('vnet')), '/'))))]",
+        "location": "global",
+        "properties": {
+          "registrationEnabled": false,
+          "virtualNetwork": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+          }
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.queue.{0}', environment().suffixes.storage))]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+        "apiVersion": "2020-06-01",
+        "name": "[format('{0}/{1}', variables('privateLinkRedisDnsNames')[environment().name], format('{0}-vnetlink', last(split(resourceId('Microsoft.Network/virtualNetworks', variables('vnet')), '/'))))]",
+        "location": "global",
+        "properties": {
+          "registrationEnabled": false,
+          "virtualNetwork": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+          }
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/privateDnsZones', variables('privateLinkRedisDnsNames')[environment().name])]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+        "apiVersion": "2020-06-01",
+        "name": "[format('{0}/{1}', variables('privateLinkServiceBusDnsNames')[environment().name], format('{0}-vnetlink', last(split(resourceId('Microsoft.Network/virtualNetworks', variables('vnet')), '/'))))]",
+        "location": "global",
+        "properties": {
+          "registrationEnabled": false,
+          "virtualNetwork": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+          }
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/privateDnsZones', variables('privateLinkServiceBusDnsNames')[environment().name])]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+        "apiVersion": "2020-06-01",
+        "name": "[format('{0}/{1}', variables('privateLinkSearchDnsNames')[environment().name], format('{0}-vnetlink', last(split(resourceId('Microsoft.Network/virtualNetworks', variables('vnet')), '/'))))]",
+        "location": "global",
+        "properties": {
+          "registrationEnabled": false,
+          "virtualNetwork": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+          }
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/privateDnsZones', variables('privateLinkSearchDnsNames')[environment().name])]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+        "apiVersion": "2020-06-01",
+        "name": "[format('{0}/{1}', variables('privateLinkCosmosDnsNames')[environment().name], format('{0}-vnetlink', last(split(resourceId('Microsoft.Network/virtualNetworks', variables('vnet')), '/'))))]",
+        "location": "global",
+        "properties": {
+          "registrationEnabled": false,
+          "virtualNetwork": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+          }
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/privateDnsZones', variables('privateLinkCosmosDnsNames')[environment().name])]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+        "apiVersion": "2020-06-01",
+        "name": "[format('{0}/{1}', variables('privateLinkKeyVaultDnsNames')[environment().name], format('{0}-vnetlink', last(split(resourceId('Microsoft.Network/virtualNetworks', variables('vnet')), '/'))))]",
+        "location": "global",
+        "properties": {
+          "registrationEnabled": false,
+          "virtualNetwork": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+          }
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/privateDnsZones', variables('privateLinkKeyVaultDnsNames')[environment().name])]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+        "apiVersion": "2020-06-01",
+        "name": "[format('{0}/{1}', format('privatelink{0}', environment().suffixes.sqlServerHostname), format('{0}-vnetlink', last(split(resourceId('Microsoft.Network/virtualNetworks', variables('vnet')), '/'))))]",
+        "location": "global",
+        "properties": {
+          "registrationEnabled": false,
+          "virtualNetwork": {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+          }
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink{0}', environment().suffixes.sqlServerHostname))]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+        "apiVersion": "2022-01-01",
+        "name": "[format('{0}/{1}', format('{0}-pep', variables('functionApp1')), 'dnszonegroup')]",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "config",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', variables('privateLinkFunctionsDnsNames')[environment().name])]"
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-pep', variables('functionApp1')))]",
+          "[resourceId('Microsoft.Network/privateDnsZones', variables('privateLinkFunctionsDnsNames')[environment().name])]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+        "apiVersion": "2022-01-01",
+        "name": "[format('{0}/{1}', format('{0}-blob-pep', variables('functionsStorage')), 'dnszonegroup')]",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "config",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.blob.{0}', environment().suffixes.storage))]"
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-blob-pep', variables('functionsStorage')))]",
+          "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.blob.{0}', environment().suffixes.storage))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+        "apiVersion": "2022-01-01",
+        "name": "[format('{0}/{1}', format('{0}-table-pep', variables('functionsStorage')), 'dnszonegroup')]",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "config",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.table.{0}', environment().suffixes.storage))]"
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.table.{0}', environment().suffixes.storage))]",
+          "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-table-pep', variables('functionsStorage')))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+        "apiVersion": "2022-01-01",
+        "name": "[format('{0}/{1}', format('{0}-queue-pep', variables('functionsStorage')), 'dnszonegroup')]",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "config",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.queue.{0}', environment().suffixes.storage))]"
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.queue.{0}', environment().suffixes.storage))]",
+          "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-queue-pep', variables('functionsStorage')))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+        "apiVersion": "2022-01-01",
+        "name": "[format('{0}/{1}', format('{0}-file-pep', variables('functionsStorage')), 'dnszonegroup')]",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "config",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.file.{0}', environment().suffixes.storage))]"
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-file-pep', variables('functionsStorage')))]",
+          "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.file.{0}', environment().suffixes.storage))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+        "apiVersion": "2022-01-01",
+        "name": "[format('{0}/{1}', format('{0}-pep', variables('redis')), 'dnszonegroup')]",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "config",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', variables('privateLinkRedisDnsNames')[environment().name])]"
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/privateDnsZones', variables('privateLinkRedisDnsNames')[environment().name])]",
+          "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-pep', variables('redis')))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+        "apiVersion": "2022-01-01",
+        "name": "[format('{0}/{1}', format('{0}-pep', variables('servicebus')), 'dnszonegroup')]",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "config",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', variables('privateLinkServiceBusDnsNames')[environment().name])]"
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/privateDnsZones', variables('privateLinkServiceBusDnsNames')[environment().name])]",
+          "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-pep', variables('servicebus')))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+        "apiVersion": "2022-01-01",
+        "name": "[format('{0}/{1}', format('{0}-pep', variables('cogSearch')), 'dnszonegroup')]",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "config",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', variables('privateLinkSearchDnsNames')[environment().name])]"
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/privateDnsZones', variables('privateLinkSearchDnsNames')[environment().name])]",
+          "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-pep', variables('cogSearch')))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+        "apiVersion": "2022-01-01",
+        "name": "[format('{0}/{1}', format('{0}-pep', variables('cosmos')), 'dnszonegroup')]",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "config",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', variables('privateLinkCosmosDnsNames')[environment().name])]"
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-pep', variables('cosmos')))]",
+          "[resourceId('Microsoft.Network/privateDnsZones', variables('privateLinkCosmosDnsNames')[environment().name])]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+        "apiVersion": "2022-01-01",
+        "name": "[format('{0}/{1}', format('{0}-pep', variables('sql')), 'dnszonegroup')]",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "config",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink{0}', environment().suffixes.sqlServerHostname))]"
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink{0}', environment().suffixes.sqlServerHostname))]",
+          "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-pep', variables('sql')))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+        "apiVersion": "2022-01-01",
+        "name": "[format('{0}/{1}', format('{0}-pep', variables('keyvault')), 'dnszonegroup')]",
+        "properties": {
+          "privateDnsZoneConfigs": [
+            {
+              "name": "config",
+              "properties": {
+                "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', variables('privateLinkKeyVaultDnsNames')[environment().name])]"
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-pep', variables('keyvault')))]",
+          "[resourceId('Microsoft.Network/privateDnsZones', variables('privateLinkKeyVaultDnsNames')[environment().name])]"
+        ]
+      },
+      {
+        "type": "Microsoft.Storage/storageAccounts/fileServices/shares",
+        "apiVersion": "2022-05-01",
+        "name": "[format('{0}/{1}/{2}', variables('functionsStorage'), 'default', variables('functionContentShareName'))]",
+        "dependsOn": [
+          "[resourceId('Microsoft.Storage/storageAccounts/fileServices', variables('functionsStorage'), 'default')]"
+        ]
+      },
+      {
+        "type": "Microsoft.Storage/storageAccounts/fileServices",
+        "apiVersion": "2022-05-01",
+        "name": "[format('{0}/{1}', variables('functionsStorage'), 'default')]",
+        "dependsOn": [
+          "[resourceId('Microsoft.Storage/storageAccounts', variables('functionsStorage'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Web/sites/config",
+        "apiVersion": "2022-03-01",
+        "name": "[format('{0}/{1}', variables('app1'), 'web')]",
+        "properties": {
+          "ftpsState": "Disabled",
+          "minTlsVersion": "1.2"
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Web/sites', variables('app1'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Web/sites/config",
+        "apiVersion": "2020-12-01",
+        "name": "[format('{0}/{1}', variables('app1'), 'appsettings')]",
+        "properties": {
+          "APPINSIGHTS_INSTRUMENTATIONKEY": "[reference(resourceId('Microsoft.Insights/components', variables('insights'))).InstrumentationKey]",
+          "AZURE_SERVICE_BUS_FQ_NAMESPACE": "[replace(replace(reference(resourceId('Microsoft.ServiceBus/namespaces', variables('servicebus'))).serviceBusEndpoint, 'https://', ''), ':443/', '')]",
+          "AZURE_SERVICE_BUS_QUEUE_NAME": "[parameters('servicebusQueueName')]",
+          "AZURE_COSMOSDB_ENDPOINT_URI": "[reference(resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmos'))).documentEndpoint]",
+          "AZURE_COSMOSDB_DATABASE_NAME": "[parameters('cosmosDatabaseName')]",
+          "REDIS_CONNECTION_STRING": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/{1}/)', reference(resourceId('Microsoft.KeyVault/vaults', variables('keyvault'))).vaultUri, variables('redisConnectionStringSecretName'))]",
+          "AZURE_SEARCH_ENDPOINT_URI": "[variables('searchEndpointUrl')[environment().name]]",
+          "AZURE_SEARCH_API_KEY": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/{1}/)', reference(resourceId('Microsoft.KeyVault/vaults', variables('keyvault'))).vaultUri, variables('searchApiKeySecretName'))]"
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmos'))]",
+          "[resourceId('Microsoft.Insights/components', variables('insights'))]",
+          "[resourceId('Microsoft.KeyVault/vaults', variables('keyvault'))]",
+          "[resourceId('Microsoft.ServiceBus/namespaces', variables('servicebus'))]",
+          "[resourceId('Microsoft.Web/sites', variables('app1'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Web/sites/config",
+        "apiVersion": "2022-03-01",
+        "name": "[format('{0}/{1}', variables('app2'), 'web')]",
+        "properties": {
+          "ftpsState": "Disabled",
+          "minTlsVersion": "1.2"
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Web/sites', variables('app2'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Web/sites/config",
+        "apiVersion": "2020-12-01",
+        "name": "[format('{0}/{1}', variables('app2'), 'appsettings')]",
+        "properties": {
+          "APPINSIGHTS_INSTRUMENTATIONKEY": "[reference(resourceId('Microsoft.Insights/components', variables('insights'))).InstrumentationKey]"
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Insights/components', variables('insights'))]",
+          "[resourceId('Microsoft.Web/sites', variables('app2'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Web/sites/config",
+        "apiVersion": "2022-03-01",
+        "name": "[format('{0}/{1}', variables('functionApp1'), 'web')]",
+        "properties": {
+          "ftpsState": "Disabled",
+          "minTlsVersion": "1.2"
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Web/sites', variables('functionApp1'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Web/sites/config",
+        "apiVersion": "2020-12-01",
+        "name": "[format('{0}/{1}', variables('functionApp1'), 'appsettings')]",
+        "properties": {
+          "APPINSIGHTS_INSTRUMENTATIONKEY": "[reference(resourceId('Microsoft.Insights/components', variables('insights'))).InstrumentationKey]",
+          "AzureWebJobsStorage": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1}', variables('functionsStorage'), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('functionsStorage')), '2022-05-01').keys[0].value)]",
+          "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1}', variables('functionsStorage'), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('functionsStorage')), '2022-05-01').keys[0].value)]",
+          "FUNCTIONS_EXTENSION_VERSION": "~4",
+          "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+          "WEBSITE_CONTENTOVERVNET": "1",
+          "WEBSITE_CONTENTSHARE": "[variables('functionContentShareName')]",
+          "SQL_SERVER_CONNECTION_STRING": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/{1}/)', reference(resourceId('Microsoft.KeyVault/vaults', variables('keyvault'))).vaultUri, variables('sqlConnectionStringSecretName'))]",
+          "AZURE_SERVICE_BUS_FQ_NAMESPACE": "[replace(replace(reference(resourceId('Microsoft.ServiceBus/namespaces', variables('servicebus'))).serviceBusEndpoint, 'https://', ''), ':443/', '')]",
+          "AZURE_SERVICE_BUS_QUEUE_NAME": "[parameters('servicebusQueueName')]"
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Web/sites', variables('functionApp1'))]",
+          "[resourceId('Microsoft.Insights/components', variables('insights'))]",
+          "[resourceId('Microsoft.KeyVault/vaults', variables('keyvault'))]",
+          "[resourceId('Microsoft.ServiceBus/namespaces', variables('servicebus'))]",
+          "[resourceId('Microsoft.Storage/storageAccounts', variables('functionsStorage'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.ServiceBus/namespaces/queues",
+        "apiVersion": "2021-11-01",
+        "name": "[format('{0}/{1}', variables('servicebus'), parameters('servicebusQueueName'))]",
+        "dependsOn": [
+          "[resourceId('Microsoft.ServiceBus/namespaces', variables('servicebus'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+        "apiVersion": "2022-05-15",
+        "name": "[format('{0}/{1}/{2}', variables('cosmos'), parameters('cosmosDatabaseName'), parameters('cosmosContainerName'))]",
+        "location": "[parameters('location')]",
+        "properties": {
+          "resource": {
+            "id": "[parameters('cosmosContainerName')]",
+            "partitionKey": {
+              "kind": "Hash",
+              "paths": "[parameters('cosmosPartitionKeys')]"
+            }
+          }
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', variables('cosmos'), parameters('cosmosDatabaseName'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
+        "apiVersion": "2022-05-15",
+        "name": "[format('{0}/{1}', variables('cosmos'), parameters('cosmosDatabaseName'))]",
+        "location": "[parameters('location')]",
+        "properties": {
+          "resource": {
+            "id": "[parameters('cosmosDatabaseName')]"
+          },
+          "options": {
+            "throughput": 400
+          }
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmos'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.KeyVault/vaults/secrets",
+        "apiVersion": "2022-07-01",
+        "name": "[format('{0}/{1}', variables('keyvault'), variables('redisConnectionStringSecretName'))]",
+        "properties": {
+          "value": "[format('{0}:6380,password={1},ssl=True,abortConnect=False', reference(resourceId('Microsoft.Cache/redis', variables('redis'))).hostName, listKeys(resourceId('Microsoft.Cache/redis', variables('redis')), '2022-05-01').primaryKey)]"
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.KeyVault/vaults', variables('keyvault'))]",
+          "[resourceId('Microsoft.Cache/redis', variables('redis'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.KeyVault/vaults/secrets",
+        "apiVersion": "2022-07-01",
+        "name": "[format('{0}/{1}', variables('keyvault'), variables('sqlConnectionStringSecretName'))]",
+        "properties": {
+          "value": "[format('Server=tcp:{0},1433;Initial Catalog={1};Persist Security Info=False;User ID={2};Password={3};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;', reference(resourceId('Microsoft.Sql/servers', variables('sql'))).fullyQualifiedDomainName, parameters('sqlDatabaseName'), parameters('sqlAdmin'), parameters('sqlAdminPassword'))]"
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.KeyVault/vaults', variables('keyvault'))]",
+          "[resourceId('Microsoft.Sql/servers', variables('sql'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.KeyVault/vaults/secrets",
+        "apiVersion": "2022-07-01",
+        "name": "[format('{0}/{1}', variables('keyvault'), variables('searchApiKeySecretName'))]",
+        "properties": {
+          "value": "[listAdminKeys(resourceId('Microsoft.Search/searchServices', variables('cogSearch')), '2020-08-01').primaryKey]"
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Search/searchServices', variables('cogSearch'))]",
+          "[resourceId('Microsoft.KeyVault/vaults', variables('keyvault'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Sql/servers/databases",
+        "apiVersion": "2021-11-01",
+        "name": "[format('{0}/{1}', variables('sql'), parameters('sqlDatabaseName'))]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "sku": {
+          "name": "P1",
+          "tier": "Premium"
+        },
+        "properties": {
+          "zoneRedundant": true
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Sql/servers', variables('sql'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/virtualNetworks",
+        "apiVersion": "2022-01-01",
+        "name": "[variables('vnet')]",
+        "location": "[parameters('location')]",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": [
+              "10.0.0.0/20"
+            ]
+          },
+          "subnets": [
+            {
+              "name": "webapp-backend-subnet",
+              "properties": {
+                "addressPrefix": "10.0.0.0/26",
+                "delegations": [
+                  {
+                    "name": "serverFarmDelegation",
+                    "properties": {
+                      "serviceName": "Microsoft.Web/serverFarms"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "functions-backend-subnet",
+              "properties": {
+                "addressPrefix": "10.0.0.64/26",
+                "delegations": [
+                  {
+                    "name": "serverFarmDelegation",
+                    "properties": {
+                      "serviceName": "Microsoft.Web/serverFarms"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "functions-frontend-subnet",
+              "properties": {
+                "addressPrefix": "10.0.1.0/27",
+                "privateEndpointNetworkPolicies": "Disabled",
+                "privateLinkServiceNetworkPolicies": "Enabled"
+              }
+            },
+            {
+              "name": "storage-subnet",
+              "properties": {
+                "addressPrefix": "10.0.1.32/27",
+                "privateEndpointNetworkPolicies": "Disabled",
+                "privateLinkServiceNetworkPolicies": "Enabled"
+              }
+            },
+            {
+              "name": "redis-subnet",
+              "properties": {
+                "addressPrefix": "10.0.1.64/27",
+                "privateEndpointNetworkPolicies": "Disabled",
+                "privateLinkServiceNetworkPolicies": "Enabled"
+              }
+            },
+            {
+              "name": "servicebus-subnet",
+              "properties": {
+                "addressPrefix": "10.0.1.96/27",
+                "privateEndpointNetworkPolicies": "Disabled",
+                "privateLinkServiceNetworkPolicies": "Enabled"
+              }
+            },
+            {
+              "name": "search-subnet",
+              "properties": {
+                "addressPrefix": "10.0.1.128/27",
+                "privateEndpointNetworkPolicies": "Disabled",
+                "privateLinkServiceNetworkPolicies": "Enabled"
+              }
+            },
+            {
+              "name": "cosmos-subnet",
+              "properties": {
+                "addressPrefix": "10.0.1.160/27",
+                "privateEndpointNetworkPolicies": "Disabled",
+                "privateLinkServiceNetworkPolicies": "Enabled"
+              }
+            },
+            {
+              "name": "keyvault-subnet",
+              "properties": {
+                "addressPrefix": "10.0.1.192/27",
+                "privateEndpointNetworkPolicies": "Disabled",
+                "privateLinkServiceNetworkPolicies": "Enabled"
+              }
+            },
+            {
+              "name": "sql-server-subnet",
+              "properties": {
+                "addressPrefix": "10.0.1.224/27",
+                "privateEndpointNetworkPolicies": "Disabled",
+                "privateLinkServiceNetworkPolicies": "Enabled"
+              }
+            }
+          ]
+        },
+        "tags": "[parameters('tags')]"
+      },
+      {
+        "type": "Microsoft.OperationalInsights/workspaces",
+        "apiVersion": "2021-06-01",
+        "name": "[variables('workspace')]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]"
+      },
+      {
+        "type": "Microsoft.Insights/components",
+        "apiVersion": "2020-02-02",
+        "name": "[variables('insights')]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "kind": "web",
+        "properties": {
+          "Application_Type": "web",
+          "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('workspace'))]"
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.OperationalInsights/workspaces', variables('workspace'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateDnsZones",
+        "apiVersion": "2020-06-01",
+        "name": "[variables('privateLinkFunctionsDnsNames')[environment().name]]",
+        "location": "global",
+        "tags": "[parameters('tags')]"
+      },
+      {
+        "type": "Microsoft.Network/privateDnsZones",
+        "apiVersion": "2020-06-01",
+        "name": "[format('privatelink.blob.{0}', environment().suffixes.storage)]",
+        "location": "global",
+        "tags": "[parameters('tags')]"
+      },
+      {
+        "type": "Microsoft.Network/privateDnsZones",
+        "apiVersion": "2020-06-01",
+        "name": "[format('privatelink.file.{0}', environment().suffixes.storage)]",
+        "location": "global",
+        "tags": "[parameters('tags')]"
+      },
+      {
+        "type": "Microsoft.Network/privateDnsZones",
+        "apiVersion": "2020-06-01",
+        "name": "[format('privatelink.table.{0}', environment().suffixes.storage)]",
+        "location": "global",
+        "tags": "[parameters('tags')]"
+      },
+      {
+        "type": "Microsoft.Network/privateDnsZones",
+        "apiVersion": "2020-06-01",
+        "name": "[format('privatelink.queue.{0}', environment().suffixes.storage)]",
+        "location": "global",
+        "tags": "[parameters('tags')]"
+      },
+      {
+        "type": "Microsoft.Network/privateDnsZones",
+        "apiVersion": "2020-06-01",
+        "name": "[variables('privateLinkRedisDnsNames')[environment().name]]",
+        "location": "global",
+        "tags": "[parameters('tags')]"
+      },
+      {
+        "type": "Microsoft.Network/privateDnsZones",
+        "apiVersion": "2020-06-01",
+        "name": "[variables('privateLinkServiceBusDnsNames')[environment().name]]",
+        "location": "global",
+        "tags": "[parameters('tags')]"
+      },
+      {
+        "type": "Microsoft.Network/privateDnsZones",
+        "apiVersion": "2020-06-01",
+        "name": "[variables('privateLinkSearchDnsNames')[environment().name]]",
+        "location": "global",
+        "tags": "[parameters('tags')]"
+      },
+      {
+        "type": "Microsoft.Network/privateDnsZones",
+        "apiVersion": "2020-06-01",
+        "name": "[variables('privateLinkCosmosDnsNames')[environment().name]]",
+        "location": "global",
+        "tags": "[parameters('tags')]"
+      },
+      {
+        "type": "Microsoft.Network/privateDnsZones",
+        "apiVersion": "2020-06-01",
+        "name": "[variables('privateLinkKeyVaultDnsNames')[environment().name]]",
+        "location": "global",
+        "tags": "[parameters('tags')]"
+      },
+      {
+        "type": "Microsoft.Network/privateDnsZones",
+        "apiVersion": "2020-06-01",
+        "name": "[format('privatelink{0}', environment().suffixes.sqlServerHostname)]",
+        "location": "global",
+        "tags": "[parameters('tags')]"
+      },
+      {
+        "type": "Microsoft.Network/privateEndpoints",
+        "apiVersion": "2022-01-01",
+        "name": "[format('{0}-pep', variables('functionApp1'))]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "properties": {
+          "subnet": {
+            "id": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))).subnets[2].id]"
+          },
+          "privateLinkServiceConnections": [
+            {
+              "name": "peplink",
+              "properties": {
+                "privateLinkServiceId": "[resourceId('Microsoft.Web/sites', variables('functionApp1'))]",
+                "groupIds": [
+                  "sites"
+                ]
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Web/sites', variables('functionApp1'))]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateEndpoints",
+        "apiVersion": "2022-01-01",
+        "name": "[format('{0}-blob-pep', variables('functionsStorage'))]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "properties": {
+          "subnet": {
+            "id": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))).subnets[3].id]"
+          },
+          "privateLinkServiceConnections": [
+            {
+              "name": "peplink",
+              "properties": {
+                "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', variables('functionsStorage'))]",
+                "groupIds": [
+                  "blob"
+                ]
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Storage/storageAccounts', variables('functionsStorage'))]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateEndpoints",
+        "apiVersion": "2022-01-01",
+        "name": "[format('{0}-table-pep', variables('functionsStorage'))]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "properties": {
+          "subnet": {
+            "id": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))).subnets[3].id]"
+          },
+          "privateLinkServiceConnections": [
+            {
+              "name": "peplink",
+              "properties": {
+                "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', variables('functionsStorage'))]",
+                "groupIds": [
+                  "table"
+                ]
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Storage/storageAccounts', variables('functionsStorage'))]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateEndpoints",
+        "apiVersion": "2022-01-01",
+        "name": "[format('{0}-queue-pep', variables('functionsStorage'))]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "properties": {
+          "subnet": {
+            "id": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))).subnets[3].id]"
+          },
+          "privateLinkServiceConnections": [
+            {
+              "name": "peplink",
+              "properties": {
+                "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', variables('functionsStorage'))]",
+                "groupIds": [
+                  "queue"
+                ]
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Storage/storageAccounts', variables('functionsStorage'))]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateEndpoints",
+        "apiVersion": "2022-01-01",
+        "name": "[format('{0}-file-pep', variables('functionsStorage'))]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "properties": {
+          "subnet": {
+            "id": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))).subnets[3].id]"
+          },
+          "privateLinkServiceConnections": [
+            {
+              "name": "peplink",
+              "properties": {
+                "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', variables('functionsStorage'))]",
+                "groupIds": [
+                  "file"
+                ]
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Storage/storageAccounts', variables('functionsStorage'))]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateEndpoints",
+        "apiVersion": "2022-01-01",
+        "name": "[format('{0}-pep', variables('redis'))]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "properties": {
+          "subnet": {
+            "id": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))).subnets[4].id]"
+          },
+          "privateLinkServiceConnections": [
+            {
+              "name": "peplink",
+              "properties": {
+                "privateLinkServiceId": "[resourceId('Microsoft.Cache/redis', variables('redis'))]",
+                "groupIds": [
+                  "redisCache"
+                ]
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Cache/redis', variables('redis'))]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateEndpoints",
+        "apiVersion": "2022-01-01",
+        "name": "[format('{0}-pep', variables('servicebus'))]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "properties": {
+          "subnet": {
+            "id": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))).subnets[5].id]"
+          },
+          "privateLinkServiceConnections": [
+            {
+              "name": "peplink",
+              "properties": {
+                "privateLinkServiceId": "[resourceId('Microsoft.ServiceBus/namespaces', variables('servicebus'))]",
+                "groupIds": [
+                  "namespace"
+                ]
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.ServiceBus/namespaces', variables('servicebus'))]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateEndpoints",
+        "apiVersion": "2022-01-01",
+        "name": "[format('{0}-pep', variables('cogSearch'))]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "properties": {
+          "subnet": {
+            "id": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))).subnets[6].id]"
+          },
+          "privateLinkServiceConnections": [
+            {
+              "name": "peplink",
+              "properties": {
+                "privateLinkServiceId": "[resourceId('Microsoft.Search/searchServices', variables('cogSearch'))]",
+                "groupIds": [
+                  "searchService"
+                ]
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Search/searchServices', variables('cogSearch'))]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateEndpoints",
+        "apiVersion": "2022-01-01",
+        "name": "[format('{0}-pep', variables('cosmos'))]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "properties": {
+          "subnet": {
+            "id": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))).subnets[7].id]"
+          },
+          "privateLinkServiceConnections": [
+            {
+              "name": "peplink",
+              "properties": {
+                "privateLinkServiceId": "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmos'))]",
+                "groupIds": [
+                  "sql"
+                ]
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmos'))]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateEndpoints",
+        "apiVersion": "2022-01-01",
+        "name": "[format('{0}-pep', variables('sql'))]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "properties": {
+          "subnet": {
+            "id": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))).subnets[9].id]"
+          },
+          "privateLinkServiceConnections": [
+            {
+              "name": "peplink",
+              "properties": {
+                "privateLinkServiceId": "[resourceId('Microsoft.Sql/servers', variables('sql'))]",
+                "groupIds": [
+                  "sqlServer"
+                ]
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Sql/servers', variables('sql'))]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Network/privateEndpoints",
+        "apiVersion": "2022-01-01",
+        "name": "[format('{0}-pep', variables('keyvault'))]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "properties": {
+          "subnet": {
+            "id": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))).subnets[8].id]"
+          },
+          "privateLinkServiceConnections": [
+            {
+              "name": "peplink",
+              "properties": {
+                "privateLinkServiceId": "[resourceId('Microsoft.KeyVault/vaults', variables('keyvault'))]",
+                "groupIds": [
+                  "vault"
+                ]
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.KeyVault/vaults', variables('keyvault'))]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Storage/storageAccounts",
+        "apiVersion": "2022-05-01",
+        "name": "[variables('functionsStorage')]",
+        "kind": "StorageV2",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "sku": {
+          "name": "Standard_ZRS"
+        },
+        "properties": {
+          "allowBlobPublicAccess": false,
+          "publicNetworkAccess": "Disabled",
+          "accessTier": "Hot"
+        }
+      },
+      {
+        "type": "Microsoft.Web/serverfarms",
+        "apiVersion": "2022-03-01",
+        "name": "[variables('functionsPlan')]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "kind": "elastic",
+        "sku": {
+          "name": "EP2",
+          "tier": "ElasticPremium",
+          "size": "EP2",
+          "family": "EP",
+          "capacity": 3
+        },
+        "properties": {
+          "maximumElasticWorkerCount": 10,
+          "zoneRedundant": true
+        }
+      },
+      {
+        "type": "Microsoft.Web/serverfarms",
+        "apiVersion": "2022-03-01",
+        "name": "[variables('appServicePlan')]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "kind": "elastic",
+        "sku": "[variables('appServicePlanPremiumSkus')[parameters('appServicePlanPremiumSku')]]",
+        "properties": {
+          "zoneRedundant": true,
+          "targetWorkerCount": 3
+        }
+      },
+      {
+        "type": "Microsoft.Web/sites",
+        "apiVersion": "2022-03-01",
+        "name": "[variables('app1')]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "kind": "app",
+        "identity": {
+          "type": "SystemAssigned"
+        },
+        "properties": {
+          "httpsOnly": true,
+          "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlan'))]",
+          "virtualNetworkSubnetId": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))).subnets[0].id]",
+          "clientAffinityEnabled": false,
+          "siteConfig": {
+            "alwaysOn": true,
+            "vnetRouteAllEnabled": true,
+            "windowsFxVersion": "dotnet|6.0"
+          }
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlan'))]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Web/sites",
+        "apiVersion": "2022-03-01",
+        "name": "[variables('app2')]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "kind": "app",
+        "identity": {
+          "type": "SystemAssigned"
+        },
+        "properties": {
+          "httpsOnly": true,
+          "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlan'))]",
+          "virtualNetworkSubnetId": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))).subnets[0].id]",
+          "clientAffinityEnabled": false,
+          "siteConfig": {
+            "alwaysOn": true,
+            "vnetRouteAllEnabled": true,
+            "windowsFxVersion": "dotnet|6.0"
+          }
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlan'))]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Web/sites",
+        "apiVersion": "2022-03-01",
+        "name": "[variables('functionApp1')]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "kind": "functionapp",
+        "identity": {
+          "type": "SystemAssigned"
+        },
+        "properties": {
+          "httpsOnly": true,
+          "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('functionsPlan'))]",
+          "virtualNetworkSubnetId": "[reference(resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))).subnets[1].id]",
+          "siteConfig": {
+            "vnetRouteAllEnabled": true,
+            "windowsFxVersion": "dotnet|6.0"
+          }
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Web/serverfarms', variables('functionsPlan'))]",
+          "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Web/staticSites",
+        "apiVersion": "2022-03-01",
+        "name": "[variables('swa')]",
+        "location": "[parameters('staticWebAppLocation')]",
+        "tags": "[parameters('tags')]",
+        "sku": {
+          "name": "Standard",
+          "tier": "Standard"
+        },
+        "properties": {
+          "repositoryUrl": "https://github.com/staticwebdev/vanilla-basic",
+          "branch": "main"
+        }
+      },
+      {
+        "type": "Microsoft.Cdn/profiles",
+        "apiVersion": "2021-06-01",
+        "name": "[variables('frontDoor')]",
+        "location": "global",
+        "tags": "[parameters('tags')]",
+        "sku": {
+          "name": "Premium_AzureFrontDoor"
+        }
+      },
+      {
+        "type": "Microsoft.Cdn/profiles/afdEndpoints",
+        "apiVersion": "2021-06-01",
+        "name": "[format('{0}/{1}', variables('frontDoor'), variables('spaFrontend'))]",
+        "location": "global",
+        "properties": {
+          "enabledState": "Enabled"
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Cdn/profiles', variables('frontDoor'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Cdn/profiles/afdEndpoints",
+        "apiVersion": "2021-06-01",
+        "name": "[format('{0}/{1}', variables('frontDoor'), variables('apiFrontend'))]",
+        "location": "global",
+        "properties": {
+          "enabledState": "Enabled"
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Cdn/profiles', variables('frontDoor'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Cdn/profiles/originGroups",
+        "apiVersion": "2021-06-01",
+        "name": "[format('{0}/{1}', variables('frontDoor'), variables('spaFrontDoorOriginGroup'))]",
+        "properties": {
+          "loadBalancingSettings": {
+            "sampleSize": 4,
+            "successfulSamplesRequired": 3
+          },
+          "healthProbeSettings": {
+            "probePath": "/",
+            "probeRequestType": "HEAD",
+            "probeProtocol": "Https",
+            "probeIntervalInSeconds": 255
+          }
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Cdn/profiles', variables('frontDoor'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Cdn/profiles/originGroups/origins",
+        "apiVersion": "2021-06-01",
+        "name": "[format('{0}/{1}/{2}', variables('frontDoor'), variables('spaFrontDoorOriginGroup'), variables('spaFrontDoorOrigin'))]",
+        "properties": {
+          "hostName": "[reference(resourceId('Microsoft.Web/staticSites', variables('swa'))).defaultHostname]",
+          "httpPort": 80,
+          "httpsPort": 443,
+          "originHostHeader": "[reference(resourceId('Microsoft.Web/staticSites', variables('swa'))).defaultHostname]",
+          "priority": 1,
+          "weight": 1000
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Cdn/profiles/originGroups', variables('frontDoor'), variables('spaFrontDoorOriginGroup'))]",
+          "[resourceId('Microsoft.Web/staticSites', variables('swa'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Cdn/profiles/originGroups",
+        "apiVersion": "2021-06-01",
+        "name": "[format('{0}/{1}', variables('frontDoor'), variables('apiFrontDoorOriginGroup'))]",
+        "properties": {
+          "loadBalancingSettings": {
+            "sampleSize": 4,
+            "successfulSamplesRequired": 3
+          },
+          "healthProbeSettings": {
+            "probePath": "/",
+            "probeRequestType": "HEAD",
+            "probeProtocol": "Https",
+            "probeIntervalInSeconds": 255
+          }
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Cdn/profiles', variables('frontDoor'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Cdn/profiles/originGroups/origins",
+        "apiVersion": "2021-06-01",
+        "name": "[format('{0}/{1}/{2}', variables('frontDoor'), variables('apiFrontDoorOriginGroup'), variables('apiFrontDoorOrigin'))]",
+        "properties": {
+          "hostName": "[reference(resourceId('Microsoft.Web/sites', variables('app1'))).defaultHostName]",
+          "httpPort": 80,
+          "httpsPort": 443,
+          "originHostHeader": "[reference(resourceId('Microsoft.Web/sites', variables('app1'))).defaultHostName]",
+          "priority": 1,
+          "weight": 1000
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Cdn/profiles/originGroups', variables('frontDoor'), variables('apiFrontDoorOriginGroup'))]",
+          "[resourceId('Microsoft.Web/sites', variables('app1'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Cdn/profiles/afdEndpoints/routes",
+        "apiVersion": "2021-06-01",
+        "name": "[format('{0}/{1}/{2}', variables('frontDoor'), variables('spaFrontend'), variables('spaFrontDoorRoute'))]",
+        "properties": {
+          "originGroup": {
+            "id": "[resourceId('Microsoft.Cdn/profiles/originGroups', variables('frontDoor'), variables('spaFrontDoorOriginGroup'))]"
+          },
+          "supportedProtocols": [
+            "Https"
+          ],
+          "patternsToMatch": [
+            "/*"
+          ],
+          "forwardingProtocol": "HttpsOnly",
+          "linkToDefaultDomain": "Enabled",
+          "httpsRedirect": "Enabled"
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Cdn/profiles/afdEndpoints', variables('frontDoor'), variables('spaFrontend'))]",
+          "[resourceId('Microsoft.Cdn/profiles/originGroups', variables('frontDoor'), variables('spaFrontDoorOriginGroup'))]",
+          "[resourceId('Microsoft.Cdn/profiles/originGroups/origins', variables('frontDoor'), variables('spaFrontDoorOriginGroup'), variables('spaFrontDoorOrigin'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Cdn/profiles/afdEndpoints/routes",
+        "apiVersion": "2021-06-01",
+        "name": "[format('{0}/{1}/{2}', variables('frontDoor'), variables('apiFrontend'), variables('apiFrontDoorRoute'))]",
+        "properties": {
+          "originGroup": {
+            "id": "[resourceId('Microsoft.Cdn/profiles/originGroups', variables('frontDoor'), variables('apiFrontDoorOriginGroup'))]"
+          },
+          "supportedProtocols": [
+            "Https"
+          ],
+          "patternsToMatch": [
+            "/*"
+          ],
+          "forwardingProtocol": "HttpsOnly",
+          "linkToDefaultDomain": "Enabled",
+          "httpsRedirect": "Enabled"
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Cdn/profiles/afdEndpoints', variables('frontDoor'), variables('apiFrontend'))]",
+          "[resourceId('Microsoft.Cdn/profiles/originGroups', variables('frontDoor'), variables('apiFrontDoorOriginGroup'))]",
+          "[resourceId('Microsoft.Cdn/profiles/originGroups/origins', variables('frontDoor'), variables('apiFrontDoorOriginGroup'), variables('apiFrontDoorOrigin'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Cache/redis",
+        "apiVersion": "2022-05-01",
+        "name": "[variables('redis')]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "zones": [
+          "1",
+          "2",
+          "3"
+        ],
+        "properties": {
+          "sku": {
+            "capacity": 1,
+            "family": "P",
+            "name": "Premium"
+          },
+          "minimumTlsVersion": "1.2",
+          "publicNetworkAccess": "Disabled",
+          "replicasPerMaster": 2,
+          "replicasPerPrimary": 2
+        }
+      },
+      {
+        "type": "Microsoft.ServiceBus/namespaces",
+        "apiVersion": "2021-11-01",
+        "name": "[variables('servicebus')]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "sku": {
+          "name": "Premium",
+          "capacity": 1,
+          "tier": "Premium"
+        },
+        "properties": {
+          "zoneRedundant": true
+        }
+      },
+      {
+        "type": "Microsoft.Search/searchServices",
+        "apiVersion": "2020-08-01",
+        "name": "[variables('cogSearch')]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "sku": {
+          "name": "standard"
+        },
+        "properties": {
+          "replicaCount": 3,
+          "publicNetworkAccess": "disabled"
+        }
+      },
+      {
+        "type": "Microsoft.DocumentDB/databaseAccounts",
+        "apiVersion": "2022-05-15",
+        "name": "[variables('cosmos')]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "properties": {
+          "databaseAccountOfferType": "Standard",
+          "locations": [
+            {
+              "locationName": "[parameters('location')]",
+              "isZoneRedundant": true,
+              "failoverPriority": 0
+            }
+          ],
+          "publicNetworkAccess": "Disabled",
+          "backupPolicy": {
+            "type": "Continuous"
+          }
+        }
+      },
+      {
+        "type": "Microsoft.KeyVault/vaults",
+        "apiVersion": "2022-07-01",
+        "name": "[variables('keyvault')]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "properties": {
+          "sku": {
+            "family": "A",
+            "name": "standard"
+          },
+          "tenantId": "[tenant().tenantId]",
+          "publicNetworkAccess": "disabled",
+          "accessPolicies": [
+            {
+              "objectId": "[reference(resourceId('Microsoft.Web/sites', variables('app1')), '2022-03-01', 'full').identity.principalId]",
+              "tenantId": "[reference(resourceId('Microsoft.Web/sites', variables('app1')), '2022-03-01', 'full').identity.tenantId]",
+              "permissions": {
+                "secrets": [
+                  "list",
+                  "get"
+                ]
+              }
+            },
+            {
+              "objectId": "[reference(resourceId('Microsoft.Web/sites', variables('functionApp1')), '2022-03-01', 'full').identity.principalId]",
+              "tenantId": "[reference(resourceId('Microsoft.Web/sites', variables('functionApp1')), '2022-03-01', 'full').identity.tenantId]",
+              "permissions": {
+                "secrets": [
+                  "list",
+                  "get"
+                ]
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Web/sites', variables('functionApp1'))]",
+          "[resourceId('Microsoft.Web/sites', variables('app1'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Sql/servers",
+        "apiVersion": "2021-11-01",
+        "name": "[variables('sql')]",
+        "location": "[parameters('location')]",
+        "tags": "[parameters('tags')]",
+        "properties": {
+          "administratorLogin": "[parameters('sqlAdmin')]",
+          "administratorLoginPassword": "[parameters('sqlAdminPassword')]",
+          "publicNetworkAccess": "Disabled"
+        }
+      },
+      {
+        "type": "Microsoft.Authorization/roleAssignments",
+        "apiVersion": "2022-04-01",
+        "scope": "[format('Microsoft.Storage/storageAccounts/{0}', variables('functionsStorage'))]",
+        "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', variables('functionsStorage')), resourceId('Microsoft.Web/sites', variables('functionApp1')), variables('roleDefinitionIds').storage)]",
+        "properties": {
+          "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleDefinitionIds').storage)]",
+          "principalId": "[reference(resourceId('Microsoft.Web/sites', variables('functionApp1')), '2022-03-01', 'full').identity.principalId]",
+          "principalType": "ServicePrincipal"
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Web/sites', variables('functionApp1'))]",
+          "[resourceId('Microsoft.Storage/storageAccounts', variables('functionsStorage'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Authorization/roleAssignments",
+        "apiVersion": "2022-04-01",
+        "scope": "[format('Microsoft.ServiceBus/namespaces/{0}', variables('servicebus'))]",
+        "name": "[guid(resourceId('Microsoft.ServiceBus/namespaces', variables('servicebus')), resourceId('Microsoft.Web/sites', variables('functionApp1')), variables('roleDefinitionIds').servicebus)]",
+        "properties": {
+          "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleDefinitionIds').servicebus)]",
+          "principalId": "[reference(resourceId('Microsoft.Web/sites', variables('functionApp1')), '2022-03-01', 'full').identity.principalId]",
+          "principalType": "ServicePrincipal"
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Web/sites', variables('functionApp1'))]",
+          "[resourceId('Microsoft.ServiceBus/namespaces', variables('servicebus'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Authorization/roleAssignments",
+        "apiVersion": "2022-04-01",
+        "scope": "[format('Microsoft.ServiceBus/namespaces/{0}', variables('servicebus'))]",
+        "name": "[guid(resourceId('Microsoft.ServiceBus/namespaces', variables('servicebus')), resourceId('Microsoft.Web/sites', variables('app1')), variables('roleDefinitionIds').servicebus)]",
+        "properties": {
+          "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleDefinitionIds').servicebus)]",
+          "principalId": "[reference(resourceId('Microsoft.Web/sites', variables('app1')), '2022-03-01', 'full').identity.principalId]",
+          "principalType": "ServicePrincipal"
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.ServiceBus/namespaces', variables('servicebus'))]",
+          "[resourceId('Microsoft.Web/sites', variables('app1'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Authorization/roleAssignments",
+        "apiVersion": "2022-04-01",
+        "scope": "[format('Microsoft.KeyVault/vaults/{0}', variables('keyvault'))]",
+        "name": "[guid(resourceId('Microsoft.KeyVault/vaults', variables('keyvault')), resourceId('Microsoft.Web/sites', variables('app1')), variables('roleDefinitionIds').keyvault)]",
+        "properties": {
+          "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleDefinitionIds').keyvault)]",
+          "principalId": "[reference(resourceId('Microsoft.Web/sites', variables('app1')), '2022-03-01', 'full').identity.principalId]",
+          "principalType": "ServicePrincipal"
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.KeyVault/vaults', variables('keyvault'))]",
+          "[resourceId('Microsoft.Web/sites', variables('app1'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments",
+        "apiVersion": "2022-05-15",
+        "name": "[format('{0}/{1}', variables('cosmos'), guid(variables('roleDefinitionIds').cosmosdbDataReader, resourceId('Microsoft.Web/sites', variables('app1')), resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmos'))))]",
+        "properties": {
+          "roleDefinitionId": "[format('{0}/sqlRoleDefinitions/{1}', resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmos')), variables('roleDefinitionIds').cosmosdbDataReader)]",
+          "principalId": "[reference(resourceId('Microsoft.Web/sites', variables('app1')), '2022-03-01', 'full').identity.principalId]",
+          "scope": "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmos'))]"
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmos'))]",
+          "[resourceId('Microsoft.Web/sites', variables('app1'))]"
+        ]
+      }
+    ],
+    "outputs": {
+      "applicationName": {
+        "type": "string",
+        "value": "[parameters('applicationName')]"
+      },
+      "environmentOutput": {
+        "type": "object",
+        "value": "[environment()]"
+      },
+      "functionAppPlanName": {
+        "type": "string",
+        "value": "[variables('functionsPlan')]"
+      },
+      "functionAppHostname": {
+        "type": "string",
+        "value": "[reference(resourceId('Microsoft.Web/sites', variables('functionApp1'))).defaultHostName]"
+      },
+      "functionAppName": {
+        "type": "string",
+        "value": "[variables('functionApp1')]"
+      },
+      "frontDoorApiHostname": {
+        "type": "string",
+        "value": "[reference(resourceId('Microsoft.Cdn/profiles/afdEndpoints', variables('frontDoor'), variables('apiFrontend'))).hostName]"
+      },
+      "frontDoorSpaHostname": {
+        "type": "string",
+        "value": "[reference(resourceId('Microsoft.Cdn/profiles/afdEndpoints', variables('frontDoor'), variables('spaFrontend'))).hostName]"
+      },
+      "insightsInstrumentationKey": {
+        "type": "string",
+        "value": "[reference(resourceId('Microsoft.Insights/components', variables('insights'))).InstrumentationKey]"
+      },
+      "staticWebAppHostname": {
+        "type": "string",
+        "value": "[reference(resourceId('Microsoft.Web/staticSites', variables('swa'))).defaultHostname]"
+      },
+      "webappPlanName": {
+        "type": "string",
+        "value": "[variables('appServicePlan')]"
+      },
+      "webappName": {
+        "type": "string",
+        "value": "[variables('app1')]"
+      },
+      "webappHostname": {
+        "type": "string",
+        "value": "[reference(resourceId('Microsoft.Web/sites', variables('app1'))).defaultHostName]"
+      }
+    }
+  }
