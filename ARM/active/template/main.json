@@ -1,0 +1,560 @@
+// https://github.com/Azure/azure-quickstart-templates/tree/master/quickstarts/microsoft.storage/blob-storage-private-endpoint
+// Need to convert to linked template
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+     "location": {
+        "type": "string",
+        "defaultValue": "[resourceGroup().location]",
+        "metadata": {
+          "description": "Specifies the location for all the resources."
+        }
+      },
+      "virtualNetworkName": {
+        "defaultValue": "atVnet",
+        "type": "string",
+        "metadata": {
+          "description": "Specifies the name of the virtual network hosting the virtual machine."
+        }
+      },
+      "virtualNetworkAddressPrefix": {
+        "defaultValue": "10.100.0.0/16",
+        "type": "string",
+        "metadata": {
+          "description": "Specifies the address prefix of the virtual network hosting the virtual machine."
+        }
+      },
+      "subnetName": {
+        "defaultValue": "VmSubnet",
+        "type": "string",
+        "metadata": {
+          "description": "Specifies the name of the subnet hosting the virtual machine."
+        }
+      },
+      "subnetAddressPrefix": {
+        "defaultValue": "10.100.0.0/24",
+        "type": "string",
+        "metadata": {
+          "description": "Specifies the address prefix of the subnet hosting the virtual machine."
+        }
+      },
+      // Vmss Subnet
+      "vmsssubnetName": {
+        "defaultValue": "VmssSubnet",
+        "type": "string",
+        "metadata": {
+          "description": "Specifies the name of the subnet hosting the virtual machine scale set."
+        }
+      },
+      "vmsssubnetAddressPrefix": {
+        "defaultValue": "10.100.1.0/24",
+        "type": "string",
+        "metadata": {
+          "description": "Specifies the address prefix of the subnet the virtual machine scale set."
+        }
+      },
+
+      // Application Gateway
+      "subnetAGWName": {
+        "defaultValue": "GatewaySubnet",
+        "type": "string",
+        "metadata": {
+          "description": "Specifies the name of the subnet for Application Gateway."
+        }
+      },
+      "subnetAGWAddressPrefix": {
+        "defaultValue": "10.100.2.0/24",
+        "type": "string",
+        "metadata": {
+          "description": "Specifies the address prefix of the subnet for Application Gateway."
+        }
+      },
+
+      "vmName": {
+        "type": "string",
+        "defaultValue": "webVm",
+        "metadata": {
+          "description": "Specifies the name of the virtual machine."
+        }
+      },
+      "vmSize": {
+        "type": "string",
+        "defaultValue": "Standard_DS2_v2",
+        "metadata": {
+          "description": "Specifies the size of the virtual machine."
+        }
+      },
+      "imagePublisher": {
+        "type": "string",
+        "defaultValue": "Canonical",
+        "metadata": {
+          "description": "Specifies the image publisher of the disk image used to create the virtual machine."
+        }
+      },
+      "imageOffer": {
+        "type": "string",
+        "defaultValue": "UbuntuServer",
+        "metadata": {
+          "description": "Specifies the offer of the platform image or marketplace image used to create the virtual machine."
+        }
+      },
+      "imageSku": {
+        "type": "string",
+        "defaultValue": "18.04-LTS",
+        "metadata": {
+          "description": "Specifies the Ubuntu version for the VM. This will pick a fully patched image of this given Ubuntu version."
+        }
+      },
+      "authenticationType": {
+        "type": "string",
+        "defaultValue": "password",
+        "allowedValues": [
+          "sshPublicKey",
+          "password"
+        ],
+        "metadata": {
+          "description": "Specifies the type of authentication when accessing the Virtual Machine. SSH key is recommended."
+        }
+      },
+      "adminUsername": {
+        "type": "string",
+        "defaultValue": "azadmin",
+        "metadata": {
+          "description": "Specifies the name of the administrator account of the virtual machine."
+        }
+      },
+      "adminPasswordOrKey": {
+        "type": "securestring",
+        "metadata": {
+          "description": "Specifies the SSH Key or password for the virtual machine. SSH key is recommended."
+        }
+      },
+      "diskStorageAccounType": {
+        "type": "string",
+        "defaultValue": "Standard_LRS",
+        "allowedValues": [
+          "Standard_LRS",
+          "Standard_GRS",
+          "Standard_RAGRS",
+          "Standard_ZRS",
+          "Premium_LRS",
+          "Premium_ZRS",
+          "Standard_GZRS",
+          "Standard_RAGZRS"
+        ],
+        "metadata": {
+          "description": "Specifies the storage account type for OS and data disk."
+        }
+      },
+      "numDataDisks": {
+        "type": "int",
+        "defaultValue": 0,
+        "minValue": 0,
+        "maxValue": 64,
+        "metadata": {
+          "description": "Specifies the number of data disks of the virtual machine."
+        }
+      },
+      "osDiskSize": {
+        "type": "int",
+        "defaultValue": 30,
+        "metadata": {
+          "description": "Specifies the size in GB of the OS disk of the VM."
+        }
+      },
+      "dataDiskSize": {
+        "type": "int",
+        "defaultValue": 30,
+        "metadata": {
+          "description": "Specifies the size in GB of the OS disk of the virtual machine."
+        }
+      },
+      "dataDiskCaching": {
+        "type": "string",
+        "defaultValue": "ReadWrite",
+        "metadata": {
+          "description": "Specifies the caching requirements for the data disks."
+        }
+      }
+      /*
+      "blobStorageAccountName": {
+        "type": "string",
+        "defaultValue": "[concat('storage', uniquestring(resourceGroup().id))]",
+        "metadata": {
+          "description": "Specifies the globally unique name for the storage account used to store the images of the virtual machine."
+        }
+      },
+      "blobStorageAccountPrivateEndpointName": {
+        "type": "string",
+        "defaultValue": "BlobPrivateEndpoint",
+        "metadata": {
+          "description": "Specifies the name of the private link to the boot diagnostics storage account."
+        }
+      },
+
+      // VMSS add
+      "windowsOSVersion": {
+        "type": "string",
+        "defaultValue": "2019-Datacenter",
+        "allowedValues": [
+          "2012-Datacenter",
+          "2012-R2-Datacenter",
+          "2019-Datacenter"
+        ],
+        "metadata": {
+          "description": "The Windows version for the VM. This will pick a fully patched image of this given Windows version. Allowed values: 2012-Datacenter, 2012-R2-Datacenter., 2019-Datacenter."
+        }
+      },
+      "vmSku": {
+        "type": "string",
+        "defaultValue": "Standard_A1_v2",
+        "metadata": {
+          "description": "Size of VMs in the VM Scale Set."
+        }
+      },
+      "instanceCount": {
+        "type": "int",
+        "metadata": {
+          "description": "Number of VM instances (5 or less). But note that it can be set up to 1000"
+        },
+        "minValue": 3,
+        "maxValue": 5 
+      },
+      "vmssName": {
+        "type": "string",
+        "metadata": {
+          "description": "String used as a base for naming resources. Must be 3-57 characters in length and globally unique across Azure. A hash is prepended to this string for some resources, and resource-specific information is appended."
+        },
+        "maxLength": 57
+      }
+      */
+    // Parameter End
+    },
+    "variables": {
+      "vnetId": "[resourceId('Microsoft.Network/virtualNetworks', parameters('virtualNetworkName'))]",
+      "subnetId": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), parameters('subnetName'))]",
+       "nsgName": "[concat(parameters('subnetName'), '-nsg')]",
+      "vmssnsgName": "[concat(parameters('vmsssubnetName'), '-nsg')]",
+      "nsgId": "[resourceId('Microsoft.Network/networkSecurityGroups',variables('nsgName'))]",
+      "vmssnsgId": "[resourceId('Microsoft.Network/networkSecurityGroups',variables('vmssnsgName'))]",
+      "publicIPAddressName": "[concat(parameters('vmName'), '-publicIP')]",
+
+
+      "nicName": "[concat(parameters('vmName'), '-nic')]",
+      "ipconfig_name": "ipconfig",
+      //"vmId": "[resourceId('Microsoft.Compute/virtualMachines', parameters('vmName'))]",
+      //    "customScriptId": "[resourceId('Microsoft.Compute/virtualMachines/extensions', parameters('vmName'), 'CustomScript')]",
+      //"omsAgentForLinuxId": "[resourceId('Microsoft.Compute/virtualMachines/extensions', parameters('vmName'), 'LogAnalytics')]",
+      //    "scriptFileUri": "[uri(parameters('_artifactsLocation'), concat('scripts/', parameters('scriptFileName'), parameters('_artifactsLocationSasToken')))]",
+      "linuxConfiguration": {
+        "disablePasswordAuthentication": true,
+        "ssh": {
+          "publicKeys": [
+            {
+              "path": "[concat('/home/', parameters('adminUsername'), '/.ssh/authorized_keys')]",
+              "keyData": "[parameters('adminPasswordOrKey')]"
+            }
+          ]
+        },
+        "provisionVMAgent": true
+      }
+      /*
+      // VMSS added
+      "namingInfix": "[toLower(substring(concat(parameters('vmssName'), uniqueString(resourceGroup().id)), 0, 9))]",
+      
+      "nicNamevmss": "[concat(variables('namingInfix'), '-nic')]",
+      "ipConfigName": "[concat(variables('namingInfix'), '-ipconfig')]",
+      "appGwBePoolName": "[concat(variables('namingInfix'), '-appGwBePool')]",
+      "appimagePoolName": "[concat(variables('namingInfix'), '-imageBePool')]",
+      "appvideoPoolName": "[concat(variables('namingInfix'), '-videoBePool')]",
+      "urlpathMapName": "[concat(variables('namingInfix'), '-urlpathmap')]",
+
+      "imageReference": {
+        "publisher": "MicrosoftWindowsServer",
+        "offer": "WindowsServer",
+        "sku": "[parameters('windowsOSVersion')]",
+        "version": "latest"
+      },
+      "vmssDnsName": "vmssdns" //Used for testing to open public ips for vmss
+      */
+    // Variable End
+    },
+    "resources": [
+      //****************************************************************************************
+      // Virtul Networks and Subnets
+      {
+        "apiVersion": "2019-11-01",
+        "type": "Microsoft.Network/virtualNetworks",
+        "name": "[parameters('virtualNetworkName')]",
+        "location": "[parameters('location')]",
+        "dependsOn": [
+          "[variables('nsgId')]",
+          "[variables('vmssnsgId')]"
+        ],
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": [
+              "[parameters('virtualNetworkAddressPrefix')]"
+            ]
+          },
+          "subnets": [
+            {
+              "name": "[parameters('subnetName')]",
+              "properties": {
+                "addressPrefix": "[parameters('subnetAddressPrefix')]",
+                "networkSecurityGroup": {
+                  "id": "[variables('nsgId')]"
+                },
+                "privateEndpointNetworkPolicies": "Disabled",
+                "privateLinkServiceNetworkPolicies": "Enabled"
+              }
+            },            
+            {
+              "name": "[parameters('vmsssubnetName')]",
+              "properties": {
+                "addressPrefix": "[parameters('vmsssubnetAddressPrefix')]",
+                "networkSecurityGroup": {
+                  "id": "[variables('vmssnsgId')]"
+                },
+                "privateEndpointNetworkPolicies": "Disabled",
+                "privateLinkServiceNetworkPolicies": "Enabled"
+              }
+            },
+            // AppGateway 
+            {  // use it
+              "name": "[parameters('subnetAGWName')]",
+              "properties": {
+                "addressPrefix": "[parameters('subnetAGWAddressPrefix')]",
+                /*
+                "networkSecurityGroup": {
+                  "id": "[variables('nsgAGWId')]"  // may need to add appGw NSG
+                },
+                */                
+                "privateEndpointNetworkPolicies": "Enabled",
+                "privateLinkServiceNetworkPolicies": "Enabled"
+
+              }
+            }
+            // AppGateway end 
+          ],
+          "enableDdosProtection": false, // AppGateway 
+          "enableVmProtection": false // AppGateway end         
+
+        }
+      },
+      /*
+      {
+        "apiVersion": "2020-04-01",
+        "type": "Microsoft.Network/publicIPAddresses",
+        "name": "[variables('publicIPAddressName')]",
+        "location": "[parameters('location')]",
+        "properties": {
+          "publicIPAllocationMethod": "[variables('publicIPAddressType')]",
+          "dnsSettings": {
+             "domainNameLabel": "[concat(toLower(parameters('vmName')), uniquestring(resourceGroup().id))]"
+          }
+        }
+      },
+      */
+      
+      {
+        "copy": {
+          "name": "publicIPAddress",
+          "count": "[length(range(0, 3))]"
+        },
+        "type": "Microsoft.Network/publicIPAddresses",
+        "apiVersion": "2021-08-01",
+        "name": "[format('{0}{1}', variables('publicIPAddressName'), range(0, 3)[copyIndex()])]",
+        "location": "[parameters('location')]",
+        "sku": {
+          "name": "Standard"
+        },
+        "properties": {
+          "publicIPAddressVersion": "IPv4",
+          "publicIPAllocationMethod": "Dynamic",
+          "idleTimeoutInMinutes": 4
+        }
+      },
+      // Network Security Groups 
+      {
+        "apiVersion": "2019-08-01",
+        "type": "Microsoft.Network/networkSecurityGroups",
+        "name": "[variables('nsgName')]",
+        "location": "[parameters('location')]",
+        "properties": {
+          "securityRules": [
+            {
+              "name": "AllowSSHInbound",
+              "properties": {
+                "priority": 100,
+                "access": "Allow",
+                "direction": "Inbound",
+                "destinationPortRange": "22",
+                "protocol": "Tcp",
+                "sourceAddressPrefix": "*",
+                "sourcePortRange": "*",
+                "destinationAddressPrefix": "*"
+              }
+            }
+          ]
+        }
+      },
+
+
+
+      // VM network Interfaces
+      {
+        "copy": {
+          "name": "myNic",
+          "count": "[length(range(0, 2))]"
+        },
+        "apiVersion": "2020-04-01",
+        "type": "Microsoft.Network/networkInterfaces",
+        //"name": "[variables('nicName')]",
+        "name": "[format('{0}{1}', variables('nicName'), add(range(0, 2)[copyIndex()], 1))]",
+        "location": "[parameters('location')]",
+        "dependsOn": [
+          //"[variables('publicIpId')]",
+          "[variables('vnetId')]",
+          "[variables('nsgId')]",
+          "publicIPAddress"
+        ],
+        "properties": {
+          "ipConfigurations": [
+            {
+              "name": "[format('{0}{1}', variables('ipconfig_name'), add(range(0, 2)[copyIndex()], 1))]",
+              "properties": {
+                "privateIPAllocationMethod": "Dynamic",
+                "publicIPAddress": {
+                  //"id": "[resourceId('Microsoft.Network/publicIPAddresses',variables('publicIPAddressName'))]"
+                  "id": "[resourceId('Microsoft.Network/publicIPAddresses', format('{0}{1}', variables('publicIPAddressName'), add(range(0, 2)[copyIndex()], 1)))]"                
+                  //"id": "[variables('publicIpId')]"
+                },
+                "subnet": {
+                  "id": "[variables('subnetId')]"
+                }
+              }
+            }
+          ]
+        }
+      },
+
+
+      // Virtual Machines
+      {
+        "copy": {
+          "name": "VMbk",
+          "count": "[length(range(0, 2))]"
+        },        
+        "apiVersion": "2019-12-01",
+        "type": "Microsoft.Compute/virtualMachines",
+        //"name": "[parameters('vmName')]",
+        "name": "[format('{0}{1}', parameters('vmName'), add(range(0, 2)[copyIndex()], 1))]",
+        "location": "[parameters('location')]",
+        "dependsOn": [
+          "[variables('blobStorageAccountPrivateEndpointId')]",
+          //"[variables('nicId')]"
+          "myNic"
+          //"[variables('nicId')]"
+          //"[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"
+        ],
+        "properties": {
+          "hardwareProfile": {
+            "vmSize": "[parameters('vmSize')]"
+          },
+          "osProfile": {
+            "computerName": "[parameters('vmName')]",
+            "adminUsername": "[parameters('adminUsername')]",
+            "adminPassword": "[parameters('adminPasswordOrKey')]",
+            "linuxConfiguration": "[if(equals(parameters('authenticationType'), 'password'), json('null'), variables('linuxConfiguration'))]"
+          },
+          "storageProfile": {
+            "imageReference": {
+              "publisher": "[parameters('imagePublisher')]",
+              "offer": "[parameters('imageOffer')]",
+              "sku": "[parameters('imageSku')]",
+              "version": "latest"
+            },
+            "osDisk": {
+              "name": "[concat(parameters('vmName'),'_OSDisk')]",
+              "caching": "ReadWrite",
+              "createOption": "FromImage",
+              "diskSizeGB": "[parameters('osDiskSize')]",
+              "managedDisk": {
+                "storageAccountType": "[parameters('diskStorageAccounType')]"
+              }
+            },
+            "copy": [
+              {
+                "name": "dataDisks",
+                "count": "[parameters('numDataDisks')]",
+                "input": {
+                  "caching": "[parameters('dataDiskCaching')]",
+                  "diskSizeGB": "[parameters('dataDiskSize')]",
+                  "lun": "[copyIndex('dataDisks')]",
+                  "name": "[concat(parameters('vmName'),'-DataDisk',copyIndex('dataDisks'))]",
+                  "createOption": "Empty",
+                  "managedDisk": {
+                    "storageAccountType": "[parameters('diskStorageAccounType')]"
+                  }
+                }
+              }
+            ]
+          },
+          "networkProfile": {
+            "networkInterfaces": [
+              {
+                //"id": "[resourceId('Microsoft.Network/networkInterfaces',variables('nicName'))]"
+                "id": "[resourceId('Microsoft.Network/networkInterfaces', format('{0}{1}', variables('nicName'), add(range(0, 2)[copyIndex()], 1)))]"
+
+              }
+            ],
+            "networkInterfaceConfigurations": [
+              {
+              "name": "nintappgwbepool",
+              "properties": {
+                "ipConfigurations": [
+                    {
+                      "name": "string",
+                      "properties": {
+                          "applicationGatewayBackendAddressPools": [                                
+                            {
+                            "id": "[resourceId('Microsoft.Network/applicationGateways/backendAddressPools', variables('applicationGateWayName'),variables('appvideoPoolName'))]"
+                            }                                
+                          ]
+                        }
+                    }
+                  ]
+                }
+              }
+            ]
+            
+          },
+          "diagnosticsProfile": {
+            "bootDiagnostics": {
+              "enabled": true,
+              "storageUri": "[reference(variables('blobStorageAccountId')).primaryEndpoints['blob']]"
+            }
+          }
+        }
+      },
+      // Linked Template 1. blob  2. appGW
+      {
+          "type":"Microsoft.Resources/deployments",
+          "apiVersion": "2021-04-01",
+          "name":"LinkedTemplate",
+          "properties": {
+              "mode": "Incremental",
+              "templateLink": {
+                  "uri": "https://name.blob.core.windows.net/templates/StorageBlob.json",
+                  "contentVersion":"1.0.0.0"
+              },
+              "parametersLink": {
+                  "uri": "https://name.blob.core.windows.net/templates/StorageBlob-parameters.json",
+                  "contentVersion":"1.0.0.0"
+              }
+          }
+      }
+    ]
+}

@@ -1,0 +1,210 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+     "location": {
+        "type": "string",
+        "defaultValue": "[resourceGroup().location]",
+        "metadata": {
+          "description": "Specifies the location for all the resources."
+        }
+      },
+      // VMSS add
+      "windowsOSVersion": {
+        "type": "string",
+        "defaultValue": "2019-Datacenter",
+        "allowedValues": [
+          "2012-Datacenter",
+          "2012-R2-Datacenter",
+          "2019-Datacenter"
+        ],
+        "metadata": {
+          "description": "The Windows version for the VM. This will pick a fully patched image of this given Windows version. Allowed values: 2012-Datacenter, 2012-R2-Datacenter., 2019-Datacenter."
+        }
+      },
+      "vmSku": {
+        "type": "string",
+        "defaultValue": "Standard_A1_v2",
+        "metadata": {
+          "description": "Size of VMs in the VM Scale Set."
+        }
+      },
+      "instanceCount": {
+        "type": "int",
+        "metadata": {
+          "description": "Number of VM instances (5 or less). But note that it can be set up to 1000"
+        },
+        "minValue": 3,
+        "maxValue": 5 
+      },
+      "vmssName": {
+        "type": "string",
+        "metadata": {
+          "description": "String used as a base for naming resources. Must be 3-57 characters in length and globally unique across Azure. A hash is prepended to this string for some resources, and resource-specific information is appended."
+        },
+        "maxLength": 57
+      }
+
+    },
+    "variables": {      
+        // VMSS added
+        "namingInfix": "[toLower(substring(concat(parameters('vmssName'), uniqueString(resourceGroup().id)), 0, 9))]",
+    
+        "nicNamevmss": "[concat(variables('namingInfix'), '-nic')]",
+        "ipConfigName": "[concat(variables('namingInfix'), '-ipconfig')]",
+        "appGwBePoolName": "[concat(variables('namingInfix'), '-appGwBePool')]",
+        "appimagePoolName": "[concat(variables('namingInfix'), '-imageBePool')]",
+        "appvideoPoolName": "[concat(variables('namingInfix'), '-videoBePool')]",
+        "urlpathMapName": "[concat(variables('namingInfix'), '-urlpathmap')]",
+    
+        "imageReference": {
+            "publisher": "MicrosoftWindowsServer",
+            "offer": "WindowsServer",
+            "sku": "[parameters('windowsOSVersion')]",
+            "version": "latest"
+        },
+        "vmssDnsName": "vmssdns" //Used for testing to open public ips for vmss
+      
+          // Variable End
+    },
+    "resources":[
+      //  --------------  VM Scale Set ------------------//     
+      // VMSS Network Security Groups 
+      {
+        "apiVersion": "2019-08-01",
+        "type": "Microsoft.Network/networkSecurityGroups",
+        "name": "[variables('vmssnsgName')]",
+        "location": "[parameters('location')]",
+        "properties": {
+          "securityRules": [
+            {
+              "name": "AllowAnyRDPInbound",
+              "properties": {
+                "priority": 110,
+                "access": "Allow",
+                "direction": "Inbound",
+                "destinationPortRange": "3389",
+                "protocol": "Tcp",
+                "sourceAddressPrefix": "*",
+                "sourcePortRange": "*",
+                "destinationAddressPrefix": "*"
+              }
+            }
+          ]
+        }
+      },
+      // VMSS added
+      {
+        "type": "Microsoft.Compute/virtualMachineScaleSets",
+        "name": "[variables('namingInfix')]",
+        "location": "[parameters('location')]",
+        "apiVersion": "2016-04-30-preview",
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/virtualNetworks/', parameters('virtualNetworkName'))]",
+          "[resourceId('Microsoft.Network/applicationGateways/', variables('applicationGateWayName'))]"
+        ],
+        "sku": {
+          "name": "[parameters('vmSku')]",
+          "tier": "Standard",
+          "capacity": "[parameters('instanceCount')]"
+        },
+        "properties": {
+          "overprovision": "true",
+          "singlePlacementGroup": "false",
+          "upgradePolicy": {
+            "mode": "Automatic"
+          },
+          "virtualMachineProfile": {
+            "storageProfile": {
+              "osDisk": {
+                "caching": "ReadWrite",
+                "createOption": "FromImage"
+              },
+              "imageReference": "[variables('imageReference')]"
+            },
+            "osProfile": {
+              "computerNamePrefix": "[variables('namingInfix')]",
+              "adminUsername": "[parameters('adminUsername')]",
+              "adminPassword": "[parameters('adminPasswordOrKey')]"
+            },
+            "networkProfile": {
+              "networkInterfaceConfigurations": [
+                {
+                  "name": "[variables('nicNamevmss')]",
+                  "properties": {
+                    "primary": true,
+                    "ipConfigurations": [
+                      {
+                        "name": "[variables('ipConfigName')]",
+                        "properties": {
+                          "subnet": {                            
+                            //"id": "[resourceId('Microsoft.Network/virtualNetworks/subnets/', parameters('virtualNetworkName'), parameters('vmsssubnetName'))]"
+                            "id": "[variables('vmsssubnetId')]"
+                          },
+                          "ApplicationGatewayBackendAddressPools": [
+                            {
+                              "id": "[resourceId('Microsoft.Network/applicationGateways/backendAddressPools/', variables('applicationGateWayName'), variables('appGwBePoolName'))]"  
+                            },
+                            {
+                              "id": "[resourceId('Microsoft.Network/applicationGateways/backendAddressPools', variables('applicationGateWayName'),variables('appimagePoolName'))]"
+                            },
+                            {
+                             // "id": "[resourceId('Microsoft.Network/applicationGateways/backendAddressPools', variables('applicationGateWayName'),variables('appvideoPoolName'))]"
+                            }
+                          ],
+                          // added temporarly for testing VMSS 
+                          "publicIPAddressconfiguration": {
+                              "name": "publicip",
+                              "properties": {
+                              "idleTimeoutInMinutes": 10,
+                              "dnsSettings": {
+                                  "domainNameLabel": "[variables('vmssDnsName')]"
+                                }
+                              }
+                          }
+                        }
+                      }
+                    ],
+                    "networkSecurityGroup": {
+                      "id": "[variables('vmssnsgId')]"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+      // VMSS Network Interfaces
+      /*
+      {
+        "apiVersion": "2020-04-01",
+        "type": "Microsoft.Network/networkInterfaces",
+        "name": "[variables('nicNamevmss')]",
+        "location": "[parameters('location')]",
+        "dependsOn": [
+          "[variables('publicIpId')]",
+          "[variables('vnetId')]"
+        ],
+        "properties": {
+          "ipConfigurations": [
+            {
+              "name": "ipconfig1",
+              "properties": {
+                "privateIPAllocationMethod": "Dynamic",
+                "publicIPAddress": {
+                  "id": "[resourceId('Microsoft.Network/publicIPAddresses',variables('publicIPAddressName'))]"
+                },
+                "subnet": {
+                  "id": "[variables('vmsssubnetId')]"
+                }
+              }
+            }
+          ]
+        }
+      }
+      */  
+      // VMSS end
+    // resource end
+    ]
+}

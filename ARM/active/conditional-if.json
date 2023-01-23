@@ -1,0 +1,51 @@
+"variables": {
+      "lb?": "[bool(equals(parameters('env'), 'prod'))]",
+      "pip?": "[bool(parameters('dnsLabelPrefix'))]",
+      "lbName": "loadBalancer",
+      "lbID": "[resourceId('Microsoft.Network/loadBalancers',variables('lbName'))]",
+      "pipObject": {
+          "publicIPAddress": {
+              "id": "[resourceId('Microsoft.Network/publicIPAddresses',variables('pipName'))]"
+          }
+      },
+      "bepoolObject": {
+          "loadBalancerBackendAddressPools": [
+              {
+                  "id": "[concat(variables('lbID'), '/backendAddressPools/BackendPool1')]"
+              },
+          ],
+          "loadBalancerInboundNatRules": [
+              {
+                  "id": "[concat(variables('lbID'),'/inboundNatRules/ssh')]"
+              }
+          ]
+      },
+      "ipObject0": {
+          "privateIPAllocationMethod": "Dynamic",
+          "subnet": {
+              "id": "[variables('subnetRef')]"
+          }
+      },
+      "ipObject1": "[if(variables('pip?'), union(variables('ipObject0'), variables('pipObject')),    variables('ipObject0'))]",
+      "ipObject":  "[if(variables('lb?'),  union(variables('ipObject1'), variables('bepoolObject')), variables('ipObject1'))]",
+},
+"resources": [
+  {
+      "name": "[variables('nicName')]",
+      "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2017-04-01",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+          "[resourceId('Microsoft.Network/publicIPAddresses/', variables('pipName'))]",
+          "[variables('vnetID')]"
+      ],
+      "properties": {
+          "ipConfigurations": [
+              {
+                  "name": "ipconfig1",
+                  "properties": "[variables('ipObject')]"
+              }
+          ]
+      }
+  },
+]
