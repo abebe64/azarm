@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script>
+      const axios = window.axios;
+      async function uploadToVM(file) {
+        try {
+          const fileContent = new Blob([file], { type: 'application/octet-stream' });
+          const response = await axios.post(
+            'https://<your-virtual-machine-url>/verify-image',
+            fileContent,
+            {
+              headers: {
+                'Content-Type': 'application/octet-stream'
+              }
+            }
+          );
+          if (response.status !== 200) {
+            throw new Error('Failed to verify the uploaded file');
+          }
+          return response.data.trim();
+        } catch (error) {
+          console.error(error.message);
+          throw error;
+        }
+      }
+      
+      async function uploadToBlob(blobName, file) {
+        try {
+          const fileContent = new Blob([file], { type: 'image/jpeg' });
+          const response = await axios.put(
+            `https://<your-storage-account-name>.blob.core.windows.net/<your-container-name>/${blobName}`,
+            fileContent,
+            {
+              headers: {
+                'Content-Type': 'image/jpeg'
+              }
+            }
+          );
+          if (response.status !== 200) {
+            throw new Error('Failed to upload the file to Azure Blob Storage');
+          }
+        } catch (error) {
+          console.error(error.message);
+          throw error;
+        }
+      }
+      
+      async function handleUpload(event) {
+        event.preventDefault();
+        const fileInput = document.getElementById('file-input');
+        const file = fileInput.files[0];
+        try {
+          const blobName = await uploadToVM(file);
+          await uploadToBlob(blobName, file);
+          console.log('File uploaded successfully to Azure Blob Storage');
+        } catch (error) {
+          console.error(`The uploaded file is not in the image format. Please upload an image file.`);
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <form>
+      <input type="file" id="file-input" />
+      <button type="submit" onclick="handleUpload(event)">Upload</button>
+    </form>
+  </body>
+</html>

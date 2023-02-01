@@ -1,0 +1,102 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "storageAccountName": {
+        "type": "string",
+        "metadata": {
+            "description": "Name of the storage account."
+        }
+        },
+        "skuName": {
+        "type": "string",
+        "defaultValue": "Standard_LRS",
+        "allowedValues": [
+            "Standard_LRS",
+            "Standard_GRS",
+            "Standard_RAGRS",
+            "Premium_LRS"
+        ],
+        "metadata": {
+            "description": "The type of replication to use for the storage account."
+        }
+        },
+        "kind": {
+        "type": "string",
+        "defaultValue": "Storage",
+        "allowedValues": [
+            "Storage",
+            "StorageV2",
+            "BlobStorage"
+        ],
+        "metadata": {
+            "description": "The Kind of the storage account."
+        }
+        },
+        "appGWName": {
+        "type": "string",
+        "metadata": {
+            "description": "Name of the Application Gateway."
+        }   
+        }
+    },
+    "resources": [
+        {
+        "type": "Microsoft.Storage/storageAccounts",
+        "name": "[parameters('storageAccountName')]",
+        "apiVersion": "2019-06-01",
+        "location": "[resourceGroup().location]",
+        "sku": {
+            "name": "[parameters('skuName')]"
+            },
+        "kind": "[parameters('kind')]",
+        "properties": {
+            "networkAcls": {
+                "bypass": "AzureServices",
+                "virtualNetworkRules": [],
+                "ipRules": [],
+                "defaultAction": "Allow"
+            },
+            "supportsHttpsTrafficOnly": true
+            }
+        // "dependsOn": [
+        //   "[concat('Microsoft.Network/networkSecurityGroups/', variables('nsgName'))]"
+        // ],
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/providers/networkAcls",
+            "apiVersion": "2020-06-01",
+            "name": "[concat(parameters('storageAccountName'), '/default')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+            ],
+            "properties": {
+                "networkAcls": {
+                    "defaultAction": "Allow",
+                    "ipRules": [],
+                    "virtualNetworkRules": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/applicationGateways', parameters('appGWName'))]",
+                            "action": "Allow",
+                            "state": "Present"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/blobServices/endpoints",
+            "apiVersion": "2020-06-01",
+            "name": "[concat(parameters('storageAccountName'), '/default/blob')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts/providers/networkAcls', concat(parameters('storageAccountName'), '/default'))]"
+            ],
+            "properties": {
+                "protocols": [
+                    "https"
+                ]
+            }
+        }
+    ]
+}

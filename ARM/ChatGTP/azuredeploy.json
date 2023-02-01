@@ -1,0 +1,132 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "vnetName": {
+        "type": "string",
+        "defaultValue": "MyVNET",
+        "metadata": {
+          "description": "The name of the virtual network."
+        }
+      },
+      "subnetPrefix": {
+        "type": "string",
+        "defaultValue": "10.0.0.0/24",
+        "metadata": {
+          "description": "The prefix of the subnet in CIDR format."
+        }
+      },
+      "appGWSubnetPrefix": {
+        "type": "string",
+        "defaultValue": "10.0.1.0/24",
+        "metadata": {
+          "description": "The prefix of the application gateway subnet in CIDR format."
+        }
+      }
+    },
+    "variables": {
+      "appGWName": "MyAppGW",
+      "appGWSubnetName": "AppGWSubnet",
+      "appGWSubnetRef": "[concat(parameters('vnetName'), '/subnets/', variables('appGWSubnetName'))]",
+      "vmssName": "MyVMSS",
+      "storageAccountName": "mystorageaccount"
+    },
+    "resources": [
+      {
+        "type": "Microsoft.Network/virtualNetworks",
+        "apiVersion": "2020-06-01",
+        "name": "[parameters('vnetName')]",
+        "location": "[resourceGroup().location]",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": [
+              "[parameters('subnetPrefix')]"
+            ]
+          },
+          "subnets": [
+            {
+              "name": "default",
+              "properties": {
+                "addressPrefix": "[parameters('subnetPrefix')]"
+              }
+            },
+            {
+              "name": "[variables('appGWSubnetName')]",
+              "properties": {
+                "addressPrefix": "[parameters('appGWSubnetPrefix')]"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "Microsoft.Resources/deployments",
+        "apiVersion": "2020-06-01",
+        "name": "appGWDeployment",
+        "dependsOn": [
+          "[resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName'))]"
+        ],
+        "properties": {
+          "mode": "Incremental",
+          "templateLink": {
+            "uri": "[concat(deployment().properties.templateLink.uri, 'appGWTemplate.json')]"
+          },
+          "parameters": {
+            "appGWName": {
+              "value": "[variables('appGWName')]"
+          },
+          "appGWSubnetRef": {
+            "value": "[variables('appGWSubnetRef')]"
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2020-06-01",
+      "name": "storageAccountDeployment",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName'))]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[concat(deployment().properties.templateLink.uri, 'storageAccountTemplate.json')]"
+        },
+        "parameters": {
+          "storageAccountName": {
+            "value": "[variables('storageAccountName')]"
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2020-06-01",
+      "name": "vmssDeployment",
+      "dependsOn": [
+        "appGWDeployment",
+        "storageAccountDeployment"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[concat(deployment().properties.templateLink.uri, 'vmssTemplate.json')]"
+        },
+        "parameters": {
+          "vnetName": {
+            "value": "[parameters('vnetName')]"
+          },
+          "vmssName": {
+            "value": "[variables('vmssName')]"
+          },
+          "storageAccountName": {
+            "value": "[variables('storageAccountName')]"
+          }
+        }
+      }
+    }
+  ]
+}
+
+  

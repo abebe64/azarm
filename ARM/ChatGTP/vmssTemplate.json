@@ -1,0 +1,158 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+   
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "vmssName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the virtual machine scale set."
+      }
+    },
+    "instanceCount": {
+      "type": "int",
+      "defaultValue": 2,
+      "metadata": {
+        "description": "The number of virtual machines in the scale set."
+      }
+    },
+    "adminUsername": {
+      "type": "string",
+      "metadata": {
+        "description": "The administrator username for the virtual machines."
+      }
+    },
+    "adminPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "The administrator password for the virtual machines."
+      }
+    },
+    "vnetSubnetId": {
+      "type": "string",
+      "metadata": {
+        "description": "The ID of the subnet to which the virtual machine scale set will be connected."
+      }
+    },
+    "vmImagePublisher": {
+      "type": "string",
+      "defaultValue": "MicrosoftWindowsServer",
+      "metadata": {
+        "description": "The name of the virtual machine image publisher."
+      }
+    },
+    "vmImageOffer": {
+      "type": "string",
+      "defaultValue": "WindowsServer",
+      "metadata": {
+        "description": "The name of the virtual machine image offer."
+      }
+    },
+    "vmImageSku": {
+      "type": "string",
+      "defaultValue": "2019-Datacenter",
+      "metadata": {
+        "description": "The virtual machine image SKU."
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Compute/virtualMachineScaleSets",
+      "apiVersion": "2019-03-01",
+      "name": "[parameters('vmssName')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "upgradePolicy": {
+          "mode": "Manual"
+        },
+        "virtualMachineProfile": {
+          "storageProfile": {
+            "osDisk": {
+              "createOption": "FromImage"
+            }
+          },
+          "osProfile": {
+            "computerNamePrefix": "[parameters('vmssName')]",
+            "adminUsername": "[parameters('adminUsername')]",
+            "adminPassword": "[parameters('adminPassword')]",
+            "windowsConfiguration": {
+              "provisionVMAgent": true,
+              "enableAutomaticUpdates": true
+            }
+          },
+          "networkProfile": {
+            "networkInterfaceConfigurations": [
+              {
+                "name": "[parameters('vmssName')]",  // add -nic suffix
+                "properties": {
+                  "primary": true,
+                  "ipConfigurations": [
+                    {
+                      "name": "[parameters('vmssName')]", // add -ipconfig suffix
+                      "properties": {
+                        "subnet": {
+                        "id": "[parameters('vnetSubnetId')]"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "sku": {
+          "name": "Standard_A1",
+          "tier": "Standard",
+          "capacity": "[parameters('instanceCount')]"
+        },
+        "networkProfile": {
+          "networkInterfaceConfigurations": [
+            {
+              "name": "[parameters('vmssName')]-nic",
+              "properties": {
+                "primary": true,
+                "ipConfigurations": [
+                  {
+                    "name": "[parameters('vmssName')]-ipconfig",
+                    "properties": {
+                      "subnet": {
+                        "id": "[parameters('vnetSubnetId')]"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "osProfile": {
+          "computerNamePrefix": "[parameters('vmssName')]",
+          "adminUsername": "[parameters('adminUsername')]",
+          "adminPassword": "[parameters('adminPassword')]",
+          "windowsConfiguration": {
+            "provisionVMAgent": true,
+            "enableAutomaticUpdates": true
+          }
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[parameters('vmImagePublisher')]",
+            "offer": "[parameters('vmImageOffer')]",
+            "sku": "[parameters('vmImageSku')]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "createOption": "FromImage",
+            "caching": "ReadWrite",
+            "managedDisk": {
+              "storageAccountType": "Standard_LRS"
+            }
+          }
+        }
+      }
+    }
+  ]
+}
+
+  

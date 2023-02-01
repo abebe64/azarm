@@ -54,6 +54,13 @@
         }
       },
       // Application Gateway
+      "appGatewayname": {
+        "defaultValue": "AppGateway",
+        "type": "string",
+        "metadata": {
+          "description": "Specifies the name of the Application Gateway."
+        }
+      },
       "subnetAGWName": {
         "defaultValue": "GatewaySubnet",
         "type": "string",
@@ -174,8 +181,68 @@
         "metadata": {
           "description": "Specifies the caching requirements for the data disks."
         }
+      },
+      // Linked Template Parameters
+      "_artifactsLocation": {
+        "type": "string",
+        "metadata": {
+          "description": "The base URI where artifacts required by this template are located. When the template is deployed using the accompanying scripts, a private location in the subscription will be used and this value will be automatically generated."
+        }
+      },
+      "_artifactsLocationSasToken": {
+        "type": "securestring",
+        "metadata": {
+          "description": "The sasToken required to access _artifactsLocation.  When the template is deployed using the accompanying scripts, a sasToken will be automatically generated."
+        },
+      "defaultValue": ""
+      },
+
+      "pathMatchlk1": {
+          "defaultValue": "/images/*",
+          "type": "string",
+          "metadata": {
+            "description": "Path match 1 for images"
+          }
+      },
+      "pathMatchlk2": {
+          "defaultValue": "/others/*",
+          "type": "string",
+          "metadata": {
+            "description": "Path match 1 for images"
+          }
       }
-      /*        
+      
+      // Virtual Machine Scale Set
+      /*
+      "templateUri-vmss": {
+        "type": "string",
+        "metadata": {
+          "description": "Linked Template Uri for Virtual Machine Scale Set"
+        }
+      },
+      "templateSas-vmss": {
+        "type": "string",
+        "metadata": {
+          "description": "Linked Template SAS for Virtual Machine Scale Set"
+        }
+      },
+      "parameterUri-vmss": {
+        "type": "string",
+        "metadata": {
+          "description": "Linked Template parameter Uri for Virtual Machine Scale Set"
+        }
+      },
+      "parameterSas-vmss": {
+        "type": "string",
+        "metadata": {
+          "description": "Linked Template parameter SAS for Virtual Machine Scale Set"
+        }
+      }
+      */
+      // END Linked Template Parameters
+
+      // Blob Storage
+      /*      
       "blobStorageAccountName": {
       "type": "string",
       "metadata": {
@@ -309,11 +376,11 @@
       {
         "copy": {
           "name": "publicIPAddress",
-          "count": "[length(range(0, 3))]"
+          "count": "[length(range(1, 3))]"
         },
         "type": "Microsoft.Network/publicIPAddresses",
         "apiVersion": "2021-08-01",
-        "name": "[format('{0}{1}', variables('publicIPAddressName'), range(0, 3)[copyIndex()])]",
+        "name": "[format('{0}{1}', variables('publicIPAddressName'), range(1, 3)[copyIndex()])]",
         "location": "[parameters('location')]",
         "sku": {
           "name": "Standard"
@@ -373,36 +440,6 @@
         }
       },
       // VM network Interfaces
-      /*
-      {
-        "apiVersion": "2020-04-01",
-        "type": "Microsoft.Network/networkInterfaces",
-        "name": "[variables('nicName')]",
-        "location": "[parameters('location')]",
-        "dependsOn": [
-          "[variables('publicIpId')]",
-          "[variables('vnetId')]"
-        ],
-        "properties": {
-          "ipConfigurations": [
-            {
-              "name": "ipconfig1",
-              "properties": {
-                "privateIPAllocationMethod": "Dynamic",
-                "publicIPAddress": {
-                  "id": "[resourceId('Microsoft.Network/publicIPAddresses',variables('publicIPAddressName'))]"
-                },
-                "subnet": {
-                  "id": "[variables('subnetId')]"
-                }
-              }
-            }
-          ]
-        }
-      },
-      */
-
-      // VM network Interfaces
       {
         "copy": {
           "name": "myNic",
@@ -414,12 +451,11 @@
         "name": "[format('{0}{1}', variables('nicName'), add(range(0, 2)[copyIndex()], 1))]",
         "location": "[parameters('location')]",
         "dependsOn": [
-          //"[variables('publicIpId')]",
-          "[resourceId('Microsoft.Network/publicIPAddresses', format('{0}{1}', variables('publicIPAddressName'), add(range(0, 2)[copyIndex()], 1)))]" ,               
-
+          //"[resourceId('Microsoft.Network/publicIPAddresses', format('{0}{1}', variables('publicIPAddressName'), add(range(0, 2)[copyIndex()], 1)))]" ,               
           "[variables('vnetId')]",
-          "[variables('nsgId')]"
-          //"publicIPAddress"
+          "[variables('nsgId')]",
+          "publicIPAddress",
+          "LinkedTemplate-appGw"
         ],
         "properties": {
           "ipConfigurations": [
@@ -456,7 +492,8 @@
         "dependsOn": [
           //"[variables('blobStorageAccountPrivateEndpointId')]", **************************
           //"[variables('nicId')]"
-          "myNic"
+          "myNic",
+          "LinkedTemplate-appGw"
           //"[variables('nicId')]"
           //"[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"
         ],
@@ -511,8 +548,7 @@
                 "id": "[resourceId('Microsoft.Network/networkInterfaces', format('{0}{1}', variables('nicName'), add(range(0, 2)[copyIndex()], 1)))]"
 
               }
-            ]
-            /*
+            ],            
             "networkInterfaceConfigurations": [
               {
               "name": "nintappgwbepool",
@@ -523,7 +559,8 @@
                       "properties": {
                           "applicationGatewayBackendAddressPools": [                                
                             {
-                               "id": "[resourceId('Microsoft.Network/applicationGateways/backendAddressPools', variables('applicationGateWayName'),variables('appvideoPoolName'))]"
+                               //"id": "[resourceId('Microsoft.Network/applicationGateways/backendAddressPools', variables('applicationGateWayName'),variables('appvideoPoolName'))]"
+                               "id": "[reference('LinkedTemplate-appGw').outputs['appGwpublicIPid'].value]" 
                             } 
                                                            
                           ]
@@ -534,43 +571,79 @@
                 }
               }
             ]
-            */
           }
-
-           /*
-          
+          /*
           "diagnosticsProfile": {
             "bootDiagnostics": {
               "enabled": true,
               "storageUri": "[reference(variables('blobStorageAccountId')).primaryEndpoints['blob']]"
             }
           }
+          */
           
-        }
-          
+        }       
 
-      }
+      },
+
       // Linked Template 1. blob  2. appGW
-      /*
       {
-          "type":"Microsoft.Resources/deployments",
-          "apiVersion": "2021-04-01",
-          "name":"LinkedTemplate",
-          "properties": {
-              "mode": "Incremental",
-              "templateLink": {
-                  "uri": "https://name.blob.core.windows.net/templates/StorageBlob.json",
-                  "contentVersion":"1.0.0.0"
-              },
-              "parametersLink": {
-                  "uri": "https://name.blob.core.windows.net/templates/StorageBlob-parameters.json",
-                  "contentVersion":"1.0.0.0"
-              }
-          }
-        
-      */
-              }
-      }
-    ]
+        "type":"Microsoft.Resources/deployments",
+        "apiVersion": "2021-04-01",
+        "name":"LinkedTemplate-appGw",
+        "properties": {
+          "mode": "Incremental",
+          "parameters": {
+            "location": {
+              "value":"[resourceGroup().location]"
+            },
+            "virtualNetworkName": {
+              "value": "[parameters('virtualNetworkName')]"
+            },
 
-}
+            "pathMatch1": {
+              "value":"[parameters('pathMatchlk1')]"
+            },
+            "pathMatch2": {
+              "value":"[parameters('pathMatchlk2')]"
+            },
+            "appgwname":{
+              "value":"[parameters('appGatewayname')]"
+            }
+          },
+          // "parametersLink": {
+          //     "uri": "[concat(parameters('parameterUri-appGw'),'?',parameters('parameterSas-appGw'))]"
+          //     //"contentVersion":"1.0.0.0"
+          // }
+          
+          "templateLink": {
+              "uri": "[concat(parameters('_artifactsLocation'),parameters('_artifactsLocationSasToken'))]"
+              //"contentVersion":"1.0.0.0"   contentVersion property is not required for linked templates
+          }
+        }
+        
+      }
+    ],
+    "outputs": { 
+      "appimagePoolName": {
+          "type": "string",
+          "value": "[reference('LinkedTemplate-appGw').outputs['appimagePoolName'].value]"
+        },
+      "appvideoPoolName": {
+          "type": "string",
+          "value": "[reference('LinkedTemplate-appGw').outputs['appvideoPoolName'].value]"
+        },
+      "appGwName": {
+        "type": "string",
+          "value": "[reference('LinkedTemplate-appGw').outputs['applicationGateWayName'].value]"
+        },      
+      "appGwpublicIPAddress": {
+          "type": "string",
+          "value": "[reference('LinkedTemplate-appGw').outputs['appGwpublicIPAddressName'].value]"
+        },
+      "appGwpublicIPid": {
+          "type": "string",
+          "value": "[reference('LinkedTemplate-appGw').outputs['appGwpublicIPid'].id]" 
+        }
+               
+    }
+  }

@@ -1,0 +1,92 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "appGWName": {
+        "type": "string",
+        "metadata": {
+          "description": "The name of the application gateway."
+        }
+      },
+      "appGWSubnetRef": {
+        "type": "string",
+        "metadata": {
+          "description": "The reference to the application gateway subnet."
+        }
+      }
+    },
+    "variables": {
+      "appGWSkuName": "WAF_v2",
+      "appGWBackendAddressPoolName": "backendAddressPool",
+      "appGWBackendHTTPSettingsName": "backendHTTPSettings",
+      "appGWRuleName": "rule1"
+    },
+    "resources": [
+      {
+        "type": "Microsoft.Network/applicationGateways",
+        "apiVersion": "2020-06-01",
+        "name": "[parameters('appGWName')]",
+        "location": "[resourceGroup().location]",
+        "properties": {
+        "sku": {
+          "name": "[variables('appGWSkuName')]"
+        },
+        "subnets": [
+          {
+            "id": "[parameters('appGWSubnetRef')]"
+          }
+        ],
+        "frontendIPConfigurations": [
+          {
+            "name": "frontendIP1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic"
+            }
+          }
+        ],
+        "backendAddressPools": [
+          {
+            "name": "[variables('appGWBackendAddressPoolName')]"
+          }
+        ],
+        "backendHTTPSettingsCollection": [
+          {
+            "name": "[variables('appGWBackendHTTPSettingsName')]",
+            "properties": {
+              "port": 80,
+              "protocol": "Http",
+              "cookieBasedAffinity": "Disabled"
+            }
+          }
+        ],
+        "frontendPorts": [
+          {
+            "name": "frontendPort1",
+            "properties": {
+              "port": 80
+            }
+          }
+        ],
+        "requestRoutingRules": [
+          {
+            "name": "[variables('appGWRuleName')]",
+            "properties": {
+              "ruleType": "Basic",
+              "httpListener": {
+                "name": "listener1"
+              },
+              "backendAddressPool": {
+                "id": "[resourceId('Microsoft.Network/applicationGateways/backendAddressPools', parameters('appGWName'), variables('appGWBackendAddressPoolName'))]"
+              },
+              "backendHttpSettings": {
+                "id": "[resourceId('Microsoft.Network/applicationGateways/backendHttpSettings', parameters('appGWName'), variables('appGWBackendHTTPSettingsName'))]"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+
+  

@@ -56,7 +56,8 @@
         "appimagePoolName": "[concat(variables('namingInfix'), '-imageBePool')]",
         "appvideoPoolName": "[concat(variables('namingInfix'), '-videoBePool')]",
         "urlpathMapName": "[concat(variables('namingInfix'), '-urlpathmap')]",
-    
+        "vmssnsgName": "[concat(parameters('vmsssubnetName'), '-nsg')]",
+        "vmssnsgId": "[resourceId('Microsoft.Network/networkSecurityGroups',variables('vmssnsgName'))]",    
         "imageReference": {
             "publisher": "MicrosoftWindowsServer",
             "offer": "WindowsServer",

@@ -5,37 +5,39 @@
     "contentVersion": "1.0.0.0",
     "parameters": {
         "location": {
-        "type": "string",
-        "defaultValue": "[resourceGroup().location]",
-        "metadata": {
-            "description": "Specifies the location for all the resources."
-        }
+        "type": "string"
+        },  
+        "virtualNetworkName": {
+          "type": "string"
         },
         "pathMatch1": {
-        "type": "string",
-        "defaultValue": "/images/*",
-        "metadata": {
-            "description": "Path match string for Path Rule 1"
-        }
+          "type": "string"   
         },
         "pathMatch2": {
-            "defaultValue": "/others/*",
-            "type": "string",
-            "metadata": {
-            "description": "Path match string for Path Rule 2"
-            }
+          "type": "string"
+        },
+        "appgwname":{
+          "type":"string"
         }
-    },
-
+      },
     "variables": {
+            // "subnetAGWName":"subnetAGWNamelk",
+      // "subnetAGWAddressPrefix": "subnetAGWAddressPrefixlk",
+
+
       // ----------------AppGateway--------------
       //"nsgAGWName": "[concat(parameters('subnetAGWName'), 'NSG')]",  // App GW
-      "appGwpublicIPAddressName": "appGwpubIPname",
       "publicIPAddressTypeAGW": "Dynamic",  // changed from static
       //"nsgAGWId": "[resourceId('Microsoft.Network/networkSecurityGroups',variables('nsgAGWName'))]",
       //"subnetAGWId": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), parameters('subnetAGWName'))]", 
-      "applicationGateWayName": "AppGateway"
-
+      "applicationGateWayName": "[parameters('appgwname')]",
+      "namingprefix": "appgw",
+      "namingInfix": "[toLower(substring(concat(variables('namingprefix'), uniqueString(resourceGroup().id)), 0, 9))]",
+      "appGwpublicIPAddressName": "[concat(variables('namingInfix'), '-pubIp')]",
+      "appGwBePoolName": "[concat(variables('namingInfix'), '-defaultBePool')]",
+      "appimagePoolName": "[concat(variables('namingInfix'), '-imageBePool')]",
+      "appvideoPoolName": "[concat(variables('namingInfix'), '-videoBePool')]",
+      "urlpathMapName": "[concat(variables('namingInfix'), '-urlpathmap')]"
     },
     "resources":[   
       {
@@ -54,10 +56,8 @@
         "name": "[variables('applicationGateWayName')]",
         "location": "[parameters('location')]",
         "dependsOn":[
-          "[resourceId('Microsoft.Network/publicIPAddresses', variables('appGwpublicIPAddressName'))]",
-          "[resourceId('Microsoft.Network/virtualNetworks', parameters('virtualNetworkName'))]"
-          //"[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), parameters('subnetAGWName'))]"
-          // "[variables('subnetAGWId')]"
+         // "[resourceId('Microsoft.Network/virtualNetworks/', parameters('virtualNetworkName1'))]",
+          "[resourceId('Microsoft.Network/publicIPAddresses', variables('appGwpublicIPAddressName'))]"
         ],
 
         "properties": {
@@ -71,7 +71,7 @@
               "name": "appGatewayIpConfig",
               "properties": {
                 "subnet": {
-                  "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), parameters('subnetAGWName'))]"
+                  "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), 'GatewaySubnet')]"
                 }
               }
             }
@@ -136,25 +136,6 @@
               }
             }
           ],
-          /*
-          "requestRoutingRules": [
-            {
-              "name": "myRoutingRule",
-              "properties": {
-                "ruleType": "Basic",
-                "httpListener": {
-                  "id": "[resourceId('Microsoft.Network/applicationGateways/httpListeners', variables('applicationGateWayName'), 'myListener')]"
-                },
-                "backendAddressPool": {
-                  "id": "[resourceId('Microsoft.Network/applicationGateways/backendAddressPools', variables('applicationGateWayName'), 'myBackendPool')]"
-                },
-                "backendHttpSettings": {
-                  "id": "[resourceId('Microsoft.Network/applicationGateways/backendHttpSettingsCollection', variables('applicationGateWayName'), 'myHTTPSetting')]"
-                }
-              }
-            }
-          ],          */
-          //88888888888888888888888888888888
           "urlPathMaps": [{
               "name": "[variables('urlpathMapName')]",
               //"id": "/subscriptions/{subscriptionId}/../microsoft.network/applicationGateways/{gatewayName}/urlPathMaps/{urlpathMapName}",
@@ -236,5 +217,27 @@
           */
         }
       }
-    ]
+    ],
+    "outputs": { 
+      "appimagePoolName": {
+          "type": "string",
+          "value": "[variables('appimagePoolName')]"
+        },
+      "appvideoPoolName": {
+          "type": "string",
+          "value": "[variables('appvideoPoolName')]"
+        },
+      "appGwName": {
+        "type": "string",
+        "value":"[variables('applicationGateWayName')]"
+        },      
+      "appGwpublicIPAddress": {
+          "type": "string",
+          "value": "[variables('appGwpublicIPAddressName')]"
+        },
+      "appGwpublicIPid": {
+          "type": "string",        
+          "value":"[resourceId('Microsoft.Network/publicIPAddresses', variables('appGwpublicIPAddressName'))]"
+      }      
+    }
 }
